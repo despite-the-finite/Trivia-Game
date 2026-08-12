@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#12101c" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Live Trivia</title>
+    <meta
+      name="description"
+      content="Trivia built from today's news, science and world geography. Play, compare with friends, and send a challenge."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div id="app" aria-live="polite">
+      <!-- Boot ------------------------------------------------------------->
+      <section class="screen is-active" data-screen="boot">
+        <div class="boot">
+          <div class="spinner" role="status" aria-label="Loading"></div>
+          <p class="boot__text">Connecting…</p>
+        </div>
+      </section>
+
+      <!-- Offline / backend unreachable ------------------------------------>
+      <section class="screen" data-screen="offline">
+        <div class="panel panel--centered">
+          <div class="panel__icon" aria-hidden="true">📡</div>
+          <h1 class="panel__title">Trivia needs an internet connection</h1>
+          <p class="panel__body" data-role="offline-message">
+            Check your connection and try again.
+          </p>
+          <button class="btn btn--primary" data-action="retry-connection">TRY AGAIN</button>
+        </div>
+      </section>
+
+      <!-- Onboarding ------------------------------------------------------->
+      <section class="screen" data-screen="onboarding">
+        <div class="panel panel--centered">
+          <h1 class="panel__title panel__title--hero">Live Trivia</h1>
+          <p class="panel__body">
+            Questions written from today's news, science reporting and world
+            geography data. Pick a name — that's the whole sign-up.
+          </p>
+          <form class="form" data-role="onboarding-form">
+            <label class="field">
+              <span class="field__label">Display name</span>
+              <input
+                class="field__input"
+                name="displayName"
+                maxlength="24"
+                autocomplete="nickname"
+                placeholder="e.g. Karsh"
+                required
+              />
+            </label>
+            <p class="form__error" data-role="onboarding-error" hidden></p>
+            <button class="btn btn--primary btn--block" type="submit">START PLAYING</button>
+          </form>
+          <button class="btn btn--ghost btn--small" data-action="show-restore">
+            Moving from another device?
+          </button>
+          <form class="form form--tight" data-role="restore-form" hidden>
+            <label class="field">
+              <span class="field__label">Recovery code</span>
+              <input class="field__input" name="code" placeholder="ABCD-EFGH-JKLM" required />
+            </label>
+            <p class="form__error" data-role="restore-error" hidden></p>
+            <button class="btn btn--secondary btn--block" type="submit">RESTORE ACCOUNT</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Home ------------------------------------------------------------->
+      <section class="screen" data-screen="home">
+        <header class="topbar">
+          <div class="topbar__identity">
+            <span class="avatar" data-role="home-avatar" aria-hidden="true"></span>
+            <div>
+              <p class="topbar__name" data-role="home-name"></p>
+              <p class="topbar__code">
+                <span data-role="home-code"></span>
+                <button class="linkbtn" data-action="copy-friend-code" title="Copy friend code">copy</button>
+              </p>
+            </div>
+          </div>
+          <button class="iconbtn" data-action="open-settings" aria-label="Settings">⚙</button>
+        </header>
+
+        <div class="stats-strip" data-role="home-stats"></div>
+
+        <div class="stack">
+          <button class="card card--daily" data-action="play-daily">
+            <div class="card__label">Daily Challenge</div>
+            <div class="card__title" data-role="daily-title">Today's 10 questions</div>
+            <div class="card__meta" data-role="daily-meta">Everyone plays the same set</div>
+          </button>
+
+          <div class="section">
+            <h2 class="section__title">Quick play</h2>
+            <div class="chipgrid" data-role="category-chips">
+              <button class="chip is-selected" data-category="mixed">Mixed</button>
+              <button class="chip" data-category="current-events">Current Events</button>
+              <button class="chip" data-category="science">Science</button>
+              <button class="chip" data-category="geography">Geography</button>
+            </div>
+            <div class="chipgrid chipgrid--tight" data-role="difficulty-chips">
+              <button class="chip chip--small is-selected" data-difficulty="any">Any level</button>
+              <button class="chip chip--small" data-difficulty="easy">Easy</button>
+              <button class="chip chip--small" data-difficulty="medium">Medium</button>
+              <button class="chip chip--small" data-difficulty="hard">Hard</button>
+            </div>
+            <button class="btn btn--primary btn--block" data-action="play-quick">PLAY</button>
+          </div>
+
+          <nav class="navgrid">
+            <button class="navbtn" data-action="open-leaderboard"><span>🏆</span>Leaderboard</button>
+            <button class="navbtn" data-action="open-friends"><span>👥</span>Friends</button>
+            <button class="navbtn" data-action="create-challenge"><span>⚔️</span>Challenge</button>
+          </nav>
+        </div>
+      </section>
+
+      <!-- Game ------------------------------------------------------------->
+      <section class="screen screen--game" data-screen="game">
+        <header class="gamebar">
+          <button class="iconbtn" data-action="quit-game" aria-label="Quit game">✕</button>
+          <div class="progress">
+            <div class="progress__bar"><span data-role="progress-fill"></span></div>
+            <p class="progress__text" data-role="progress-text"></p>
+          </div>
+          <div class="scorepill">
+            <span data-role="game-score">0</span>
+            <small data-role="streak-badge" hidden></small>
+          </div>
+        </header>
+
+        <div class="timer"><span data-role="timer-fill"></span></div>
+
+        <main class="question" data-role="question-card">
+          <p class="question__tags">
+            <span class="tag" data-role="q-category"></span>
+            <span class="tag tag--difficulty" data-role="q-difficulty"></span>
+          </p>
+          <h2 class="question__text" data-role="q-text"></h2>
+          <div class="answers" data-role="answers" role="group" aria-label="Answer options"></div>
+        </main>
+
+        <div class="feedback" data-role="feedback" hidden>
+          <p class="feedback__verdict" data-role="feedback-verdict"></p>
+          <p class="feedback__points" data-role="feedback-points"></p>
+          <p class="feedback__explanation" data-role="feedback-explanation"></p>
+          <a class="feedback__source" data-role="feedback-source" target="_blank" rel="noopener noreferrer"></a>
+          <button class="btn btn--primary btn--block" data-action="next-question">NEXT</button>
+        </div>
+      </section>
+
+      <!-- Results ---------------------------------------------------------->
+      <section class="screen" data-screen="results">
+        <div class="results">
+          <p class="results__label">FINAL SCORE</p>
+          <p class="results__score" data-role="result-score">0</p>
+          <div class="results__grid">
+            <div><strong data-role="result-correct"></strong><span>Correct</span></div>
+            <div><strong data-role="result-accuracy"></strong><span>Accuracy</span></div>
+            <div><strong data-role="result-streak"></strong><span>Best streak</span></div>
+            <div><strong data-role="result-speed"></strong><span>Avg answer</span></div>
+          </div>
+          <p class="results__comparison" data-role="result-comparison" hidden></p>
+          <div class="results__actions">
+            <button class="btn btn--primary btn--block" data-action="play-again">PLAY AGAIN</button>
+            <button class="btn btn--secondary btn--block" data-action="challenge-friend">
+              CHALLENGE A FRIEND
+            </button>
+            <div class="btnrow">
+              <button class="btn btn--ghost" data-action="open-leaderboard">LEADERBOARD</button>
+              <button class="btn btn--ghost" data-action="share-score">SHARE SCORE</button>
+            </div>
+          </div>
+          <button class="linkbtn linkbtn--centered" data-action="review-answers">
+            Review the questions
+          </button>
+          <div class="review" data-role="review" hidden></div>
+        </div>
+      </section>
+
+      <!-- Leaderboard ------------------------------------------------------>
+      <section class="screen" data-screen="leaderboard">
+        <header class="topbar topbar--sub">
+          <button class="iconbtn" data-action="go-home" aria-label="Back">←</button>
+          <h1 class="topbar__title">Leaderboard</h1>
+          <span class="topbar__spacer"></span>
+        </header>
+        <div class="filters">
+          <div class="segmented" data-role="lb-scope">
+            <button class="is-selected" data-scope="friends">Friends</button>
+            <button data-scope="global">Global</button>
+          </div>
+          <div class="segmented segmented--small" data-role="lb-period">
+            <button data-period="today">Today</button>
+            <button class="is-selected" data-period="week">Week</button>
+            <button data-period="month">Month</button>
+            <button data-period="all">All time</button>
+          </div>
+          <div class="chipgrid chipgrid--tight" data-role="lb-board">
+            <button class="chip chip--small is-selected" data-board="overall">Overall</button>
+            <button class="chip chip--small" data-board="current-events">Current Events</button>
+            <button class="chip chip--small" data-board="science">Science</button>
+            <button class="chip chip--small" data-board="geography">Geography</button>
+            <button class="chip chip--small" data-board="accuracy">Accuracy</button>
+            <button class="chip chip--small" data-board="streak">Longest streak</button>
+          </div>
+        </div>
+        <ol class="board" data-role="lb-list"></ol>
+      </section>
+
+      <!-- Friends ---------------------------------------------------------->
+      <section class="screen" data-screen="friends">
+        <header class="topbar topbar--sub">
+          <button class="iconbtn" data-action="go-home" aria-label="Back">←</button>
+          <h1 class="topbar__title">Friends</h1>
+          <span class="topbar__spacer"></span>
+        </header>
+
+        <div class="panel panel--flush">
+          <p class="panel__body">
+            Your friend code is
+            <strong class="code" data-role="friends-own-code"></strong>
+          </p>
+          <button class="btn btn--secondary btn--block" data-action="share-friend-code">
+            SHARE MY CODE
+          </button>
+          <form class="form form--tight" data-role="add-friend-form">
+            <label class="field">
+              <span class="field__label">Add by friend code</span>
+              <input class="field__input" name="friendCode" placeholder="KARSH-7F4X" required />
+            </label>
+            <p class="form__error" data-role="friends-error" hidden></p>
+            <button class="btn btn--primary btn--block" type="submit">ADD FRIEND</button>
+          </form>
+        </div>
+
+        <ul class="friendlist" data-role="friends-list"></ul>
+      </section>
+
+      <!-- Challenge -------------------------------------------------------->
+      <section class="screen" data-screen="challenge">
+        <header class="topbar topbar--sub">
+          <button class="iconbtn" data-action="go-home" aria-label="Back">←</button>
+          <h1 class="topbar__title">Challenge</h1>
+          <span class="topbar__spacer"></span>
+        </header>
+        <div class="panel" data-role="challenge-panel"></div>
+      </section>
+
+      <!-- Settings --------------------------------------------------------->
+      <section class="screen" data-screen="settings">
+        <header class="topbar topbar--sub">
+          <button class="iconbtn" data-action="go-home" aria-label="Back">←</button>
+          <h1 class="topbar__title">Settings</h1>
+          <span class="topbar__spacer"></span>
+        </header>
+        <div class="panel">
+          <form class="form" data-role="rename-form">
+            <label class="field">
+              <span class="field__label">Display name</span>
+              <input class="field__input" name="displayName" maxlength="24" required />
+            </label>
+            <p class="form__error" data-role="settings-error" hidden></p>
+            <button class="btn btn--primary btn--block" type="submit">SAVE</button>
+          </form>
+          <hr class="rule" />
+          <label class="toggle">
+            <input type="checkbox" data-action="toggle-sound" />
+            <span>Sound effects</span>
+          </label>
+          <hr class="rule" />
+          <h2 class="panel__subtitle">Move to another device</h2>
+          <p class="panel__body panel__body--small">
+            Your account lives on this device. Generate a one-time code to sign in
+            somewhere else — it expires in 30 minutes.
+          </p>
+          <button class="btn btn--secondary btn--block" data-action="get-recovery-code">
+            GET RECOVERY CODE
+          </button>
+          <p class="code code--block" data-role="recovery-code" hidden></p>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast" data-role="toast" hidden></div>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>
