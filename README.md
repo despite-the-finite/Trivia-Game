@@ -8,6 +8,12 @@ all authoritative on the server.
 
 New trivia appears on its own schedule. Nobody has to ship a new build.
 
+**You do not need any of that to play.** Open `dist/trivia.html` in a browser and
+the game runs — no install, no database, no API key, no network. That build
+carries its own question bank and its own copy of the rules, so the geography and
+science half of the game works standing alone. See
+[Playing with no backend](#playing-with-no-backend).
+
 ---
 
 ## How it works
@@ -50,6 +56,18 @@ page to tamper with.
 ---
 
 ## Quick start
+
+**Just play it.** Open `dist/trivia.html` — double-click it, or drag it into a
+browser tab. That is the entire procedure. It is one self-contained file: no
+server, no build, no dependencies, and no network traffic of any kind.
+
+To host it instead, `public/` is a static site that needs no build step. Serve
+that directory from anything — `python3 -m http.server`, GitHub Pages, S3 — and
+the game plays the same way; it looks for an API, finds none, and falls back to
+the bundled bank.
+
+**Run the whole thing.** The live backend adds Current Events questions written
+from today's news, real leaderboards, friends and head-to-head challenges:
 
 ```bash
 npm install
@@ -121,7 +139,11 @@ rather than guessing.
 
 ## Scoring
 
-Calculated entirely on the server from the stored question.
+Calculated entirely on the server from the stored question. (Offline there is no
+server, so the page applies the identical rules to the bundled question — see
+[Playing with no backend](#playing-with-no-backend). A test scores the same matrix
+of inputs through both implementations and asserts they agree, so the two cannot
+drift.)
 
 | | Easy | Medium | Hard |
 |---|---|---|---|
@@ -162,6 +184,11 @@ The frontend sends only `{questionId, selectedAnswer, responseMs}`.
 
 This is not esports-grade anti-cheat, and it is not meant to be. It is meant to
 make the browser devtools a dead end.
+
+Every row above describes the hosted game and is unaffected by local mode. Local
+mode makes no such claims and does not need to: with no server there is no ranking
+to poison and no other player to cheat against, so the only person a local score
+can mislead is the person who edited it.
 
 ---
 
@@ -236,32 +263,48 @@ minutes; redeeming it rotates the token onto the new device. That is the
 ```
 api/                      serverless endpoints (one file per route)
 backend/
+  data/        packaged datasets for the offline bank: populations,
+               peaks-rivers, evergreen-science
   db/          schema.sql, pool, transactions, advisory locks
   lib/         config, http, auth, ids, rate limiting, fetch helpers
-  providers/   newsProvider, scienceProvider, geographyProvider
+  providers/   newsProvider, scienceProvider, geographyProvider,
+               offlineGeographyProvider
   services/    contentPipeline, questionGenerator, questionValidator,
                geographyTemplates, questionService, scoringService,
                playerService, sessionService, leaderboardService,
                challengeService, dailyChallengeService, llm
 public/
+  data/        question-bank.json — the generated offline bank
+  js/lib/      rng, scoring — pure rules shared with local play
   js/services/ TriviaService, PlayerService, LeaderboardService,
-               ChallengeService, ShareService, ApiClient
+               ChallengeService, ShareService, ApiClient, LocalBackend
   js/ui/       DOM helpers
   js/app.js    screen routing and the game loop
-scripts/       dev-server, migrate, refresh
-tests/         unit tests + a full end-to-end suite
+scripts/       dev-server, migrate, refresh, build-bank, build-standalone
+dist/          the single-file builds
+tests/         unit tests, the local-mode suite, and a full end-to-end suite
 ```
 
-No build step, no bundler, no frontend framework. `public/` is served as-is.
+No bundler and no frontend framework; `public/` is served as-is and needs no build
+step. The two `build:` scripts exist only to produce the offline bank and the
+single-file version, and both of their outputs are committed.
 
 ---
 
 ## Tests
 
 ```bash
-npm test                                          # unit tests
+npm test                                          # unit + local-mode tests
 DATABASE_URL=postgres://… npm test                # + full end-to-end suite
 ```
+
+`tests/localBackend.test.js` covers the offline half: it re-validates every banked
+question through the production validator, plays whole games against the in-browser
+backend, and asserts the security and fairness properties that still apply — a
+question cannot be answered twice, a question outside the session is rejected, the
+play shape carries no answer key, mashing forfeits the speed bonus, and the daily
+challenge is identical across devices. It also pins the client copies of the RNG
+and the scoring rules against the server's, so the shared logic cannot drift.
 
 The end-to-end suite starts the real API handlers against a real Postgres, seeds
 the bank through the real template and validation code, then plays games, submits
@@ -272,12 +315,91 @@ answers, and that both sides of a challenge get an identical test.
 
 ---
 
-## Online only
+## Playing with no backend
 
-This is deliberate. There is no bundled question set and no offline fallback: the
-whole point is that content is live. If the backend is unreachable the app shows
-a single friendly screen with a **TRY AGAIN** button, and going offline mid-game
-stops the timer rather than penalising the player.
+Content being live is the point of this project. Needing a Postgres instance, an
+API key and a deployment before anyone can answer a single question was not the
+point — it was just the cost. Local mode removes that cost without weakening
+anything above.
+
+When the page loads and no API answers, `ApiClient` stops calling the network and
+calls `LocalBackend` instead — an implementation of the same routes, with the same
+request and response shapes, running inside the page against a question bank
+generated at build time. Every screen, service and game-loop path above it is
+byte-identical in both modes; only the thing at the bottom changes.
+
+**What plays offline**
+
+| | |
+|---|---|
+| Quick play | Geography and Science, any difficulty |
+| Daily Challenge | Derived from the UTC date, so every device with this bank gets the same ten questions in the same order |
+| Scoring | Base points, speed bonus, streak multipliers — the same numbers |
+| Timer | 20 s per question, and backgrounding the tab still pauses it |
+| Review | Every question, its explanation and its source |
+| Stats and personal bests | Kept in `localStorage` |
+
+**What needs the backend, and why**
+
+| | |
+|---|---|
+| Current Events | Cannot be pre-baked without going stale, which is the whole premise |
+| Friends, global leaderboards | Nobody to compare against on one device |
+| Head-to-head challenges | Something has to hold both players' runs |
+| Moving an account between devices | Requires a server to move it to |
+
+Those controls are removed from the interface in local mode rather than left in
+place to fail when tapped, and the home screen says which mode is running.
+
+**On anti-cheat.** The hosted game never sends the answer key to the browser and
+never accepts a score from it; that is unchanged. Local mode cannot make that
+promise — there is no second party — so the page scores itself. A player who
+opens devtools can award themselves points that nobody else will ever see. That is
+the honest trade for a game that runs with nothing installed, and it applies only
+when there is no server.
+
+### The offline question bank
+
+`npm run build:bank` writes `public/data/question-bank.json` (467 questions).
+Nothing is invented for it:
+
+- **Geography** is produced by `buildGeographyQuestions` — the same deterministic
+  templates the live pipeline runs — over packaged datasets instead of live HTTP.
+  Answers and distractors both come out of structured data, so a question is wrong
+  only if the dataset is.
+- **Science** is a curated set of settled facts, each citing a stable reference
+  page from the body that is authoritative for it.
+- **Both** are gated by the same `questionValidator` the live pipeline gates on.
+  A question that would be rejected in production is rejected here.
+
+Two things are deliberately excluded. Current Events, because a static file cannot
+hold today's news. And population-comparison questions, because they state a
+headcount that slowly stops being true — populations are still loaded, but only to
+rank countries by prominence, which is what grades a question easy or hard and is
+never shown to a player. Land area, capitals, borders, currencies, elevations and
+river lengths have no such problem.
+
+The build is deterministic: same inputs and seed, byte-identical bank, so a
+rebuild shows up in review as a real content change or not at all.
+
+### The single-file build
+
+`npm run build:standalone` inlines the stylesheet, the modules and the bank into
+one file:
+
+```
+dist/trivia.html            a complete document — open it, host it, email it
+dist/trivia.fragment.html   the same page without the document wrapper
+```
+
+Both are committed, so playing needs no build step either. Rebuild them with
+`npm run build` after changing anything in `public/`.
+
+### Going offline mid-game
+
+Unchanged for the hosted game: the timer stops rather than penalising the player.
+The **TRY AGAIN** screen still exists, but it is now reached only when there is
+neither a backend nor a bank — a broken deployment rather than an offline one.
 
 ---
 
@@ -296,3 +418,12 @@ stops the timer rather than penalising the player.
 - **Generation cost.** A refresh generates a batch, not a question per request, so
   cost scales with the number of categories and the refresh interval rather than
   with the number of players.
+- **Offline bank size.** 467 questions across two categories. Enough that runs stop
+  repeating for a long while, not enough to be inexhaustible — a run prefers
+  questions you have not seen and falls back to older ones rather than running dry.
+- **Offline daily challenge.** Deterministic from the UTC date, so it matches for
+  everyone on the same bank; regenerating the bank changes which questions a future
+  day draws. There is no shared board to compare on, only your own score.
+- **Border peaks.** The packaged mountain data leaves `country` null for summits on
+  an international border, so the templates never ask which single country Everest
+  is in. Those peaks still appear in height comparisons.

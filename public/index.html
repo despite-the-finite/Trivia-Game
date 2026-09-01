@@ -61,7 +61,7 @@
             <p class="form__error" data-role="onboarding-error" hidden></p>
             <button class="btn btn--primary btn--block" type="submit">START PLAYING</button>
           </form>
-          <button class="btn btn--ghost btn--small" data-action="show-restore">
+          <button class="btn btn--ghost btn--small" data-action="show-restore" data-server-only>
             Moving from another device?
           </button>
           <form class="form form--tight" data-role="restore-form" hidden>
@@ -93,6 +93,12 @@
 
         <div class="stats-strip" data-role="home-stats"></div>
 
+        <p class="notice" data-local-only>
+          Playing offline from a built-in question bank — Science and Geography.
+          <a href="https://github.com/despite-the-finite/Trivia-Game#readme" target="_blank" rel="noopener noreferrer">Run the backend</a>
+          for questions written from today's news, friends and head-to-head challenges.
+        </p>
+
         <div class="stack">
           <button class="card card--daily" data-action="play-daily">
             <div class="card__label">Daily Challenge</div>
@@ -104,7 +110,7 @@
             <h2 class="section__title">Quick play</h2>
             <div class="chipgrid" data-role="category-chips">
               <button class="chip is-selected" data-category="mixed">Mixed</button>
-              <button class="chip" data-category="current-events">Current Events</button>
+              <button class="chip" data-category="current-events" data-server-only>Current Events</button>
               <button class="chip" data-category="science">Science</button>
               <button class="chip" data-category="geography">Geography</button>
             </div>
@@ -118,9 +124,9 @@
           </div>
 
           <nav class="navgrid">
-            <button class="navbtn" data-action="open-leaderboard"><span>🏆</span>Leaderboard</button>
-            <button class="navbtn" data-action="open-friends"><span>👥</span>Friends</button>
-            <button class="navbtn" data-action="create-challenge"><span>⚔️</span>Challenge</button>
+            <button class="navbtn" data-action="open-leaderboard"><span>🏆</span><span data-role="board-nav-label">Leaderboard</span></button>
+            <button class="navbtn" data-action="open-friends" data-server-only><span>👥</span>Friends</button>
+            <button class="navbtn" data-action="create-challenge" data-server-only><span>⚔️</span>Challenge</button>
           </nav>
         </div>
       </section>
@@ -173,11 +179,11 @@
           <p class="results__comparison" data-role="result-comparison" hidden></p>
           <div class="results__actions">
             <button class="btn btn--primary btn--block" data-action="play-again">PLAY AGAIN</button>
-            <button class="btn btn--secondary btn--block" data-action="challenge-friend">
+            <button class="btn btn--secondary btn--block" data-action="challenge-friend" data-server-only>
               CHALLENGE A FRIEND
             </button>
             <div class="btnrow">
-              <button class="btn btn--ghost" data-action="open-leaderboard">LEADERBOARD</button>
+              <button class="btn btn--ghost" data-action="open-leaderboard" data-role="board-button">LEADERBOARD</button>
               <button class="btn btn--ghost" data-action="share-score">SHARE SCORE</button>
             </div>
           </div>
@@ -192,11 +198,11 @@
       <section class="screen" data-screen="leaderboard">
         <header class="topbar topbar--sub">
           <button class="iconbtn" data-action="go-home" aria-label="Back">←</button>
-          <h1 class="topbar__title">Leaderboard</h1>
+          <h1 class="topbar__title" data-role="board-title">Leaderboard</h1>
           <span class="topbar__spacer"></span>
         </header>
         <div class="filters">
-          <div class="segmented" data-role="lb-scope">
+          <div class="segmented" data-role="lb-scope" data-server-only>
             <button class="is-selected" data-scope="friends">Friends</button>
             <button data-scope="global">Global</button>
           </div>
@@ -206,7 +212,7 @@
             <button data-period="month">Month</button>
             <button data-period="all">All time</button>
           </div>
-          <div class="chipgrid chipgrid--tight" data-role="lb-board">
+          <div class="chipgrid chipgrid--tight" data-role="lb-board" data-server-only>
             <button class="chip chip--small is-selected" data-board="overall">Overall</button>
             <button class="chip chip--small" data-board="current-events">Current Events</button>
             <button class="chip chip--small" data-board="science">Science</button>
@@ -278,16 +284,20 @@
             <input type="checkbox" data-action="toggle-sound" />
             <span>Sound effects</span>
           </label>
-          <hr class="rule" />
-          <h2 class="panel__subtitle">Move to another device</h2>
-          <p class="panel__body panel__body--small">
+          <hr class="rule" data-server-only />
+          <h2 class="panel__subtitle" data-server-only>Move to another device</h2>
+          <p class="panel__body panel__body--small" data-server-only>
             Your account lives on this device. Generate a one-time code to sign in
             somewhere else — it expires in 30 minutes.
           </p>
-          <button class="btn btn--secondary btn--block" data-action="get-recovery-code">
+          <button class="btn btn--secondary btn--block" data-action="get-recovery-code" data-server-only>
             GET RECOVERY CODE
           </button>
           <p class="code code--block" data-role="recovery-code" hidden></p>
+          <p class="panel__body panel__body--small" data-local-only>
+            This game is running entirely in your browser, so your progress lives in
+            this browser's storage and nowhere else.
+          </p>
         </div>
       </section>
     </div>

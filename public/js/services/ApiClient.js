@@ -4,6 +4,12 @@
  * The browser talks to our backend and nothing else. No third-party APIs, no
  * model provider, no keys of any kind live here — the only credential the client
  * holds is its own player token, which the server issued.
+ *
+ * It has one other mode. When no backend answers — the page opened from a static
+ * host, from a file, or from a deployment whose API is down — `useLocal()` points
+ * every call at an in-page implementation of the same routes instead of the
+ * network (see LocalBackend). Nothing above this class knows the difference; the
+ * services and screens issue the same calls and read the same shapes either way.
  */
 
 const TOKEN_KEY = 'live-trivia.token';
@@ -26,12 +32,28 @@ export class ApiClient {
   constructor(baseUrl = '/api') {
     this.baseUrl = baseUrl;
     this.token = null;
+    /** Non-null once the client has fallen back to in-browser play. */
+    this.local = null;
     try {
       this.token = localStorage.getItem(TOKEN_KEY);
     } catch {
       // Private browsing with storage disabled: the session still works, it
       // just will not survive a reload.
     }
+  }
+
+  /**
+   * Routes every subsequent call to an in-page backend instead of the network.
+   * One-way on purpose: a session that has started playing offline keeps its
+   * local state rather than silently switching backends mid-game.
+   */
+  useLocal(backend) {
+    this.local = backend;
+    return this;
+  }
+
+  get isLocal() {
+    return Boolean(this.local);
   }
 
   setToken(token) {
@@ -49,6 +71,8 @@ export class ApiClient {
   }
 
   async request(path, { method = 'GET', body, query, timeoutMs = 15000 } = {}) {
+    if (this.local) return this.#requestLocal(path, { method, body, query });
+
     const url = new URL(`${this.baseUrl}${path}`, window.location.origin);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined && value !== null && value !== '') {
@@ -104,6 +128,16 @@ export class ApiClient {
     }
 
     return payload ?? {};
+  }
+
+  /** Local errors are re-thrown as ApiError so callers need no special case. */
+  async #requestLocal(path, options) {
+    try {
+      return await this.local.request(path, options);
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError(err.status ?? 500, err.code ?? 'local_error', err.message);
+    }
   }
 
   get(path, query, options) {

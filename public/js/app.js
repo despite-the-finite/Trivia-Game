@@ -1,4 +1,5 @@
 import { api, ApiError } from './services/ApiClient.js';
+import { LocalBackend } from './services/LocalBackend.js';
 import { playerService } from './services/PlayerService.js';
 import { triviaService } from './services/TriviaService.js';
 import { leaderboardService } from './services/LeaderboardService.js';
@@ -19,6 +20,7 @@ import {
 
 const state = {
   screen: 'boot',
+  local: false,
   category: 'mixed',
   difficulty: 'any',
   pendingChallengeSlug: null,
@@ -41,8 +43,48 @@ function showScreen(name) {
 }
 
 /**
- * The app is online-only by design. Any network failure lands here rather than
- * degrading into a half-working state with stale content.
+ * Loads the bundled question bank and switches every API call over to it.
+ *
+ * This is what makes the game playable with nothing installed: no database, no
+ * API key, no deployment. A hosted instance still serves live, model-written
+ * Current Events questions and real multiplayer; this is the floor beneath that,
+ * not a replacement for it.
+ *
+ * @returns {Promise<boolean>} false when even the bank is unreachable.
+ */
+async function enterLocalMode() {
+  if (state.local) return true;
+  try {
+    const bank = await loadBank();
+    api.useLocal(new LocalBackend(bank));
+    state.local = true;
+    document.documentElement.dataset.mode = 'local';
+    // With one player there is nothing to rank against but yourself, so the
+    // board is relabelled everywhere it is named rather than only once opened.
+    setText('board-nav-label', 'Your runs');
+    setText('board-title', 'Your best runs');
+    const boardButton = role('board-button');
+    if (boardButton) boardButton.textContent = 'YOUR RUNS';
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The bank is inlined by the single-file build and fetched otherwise, so the
+ * same app code runs from a static host, a file:// URL and a real deployment.
+ */
+async function loadBank() {
+  if (window.__TRIVIA_BANK__) return window.__TRIVIA_BANK__;
+  const response = await fetch(new URL('data/question-bank.json', document.baseURI));
+  if (!response.ok) throw new Error(`Question bank unavailable (${response.status}).`);
+  return response.json();
+}
+
+/**
+ * Reached only when there is no backend *and* no bank — a broken deployment
+ * rather than an offline one. Local play covers every other case.
  */
 function showOffline(message) {
   stopTimer();
@@ -85,13 +127,23 @@ async function boot() {
   showScreen('boot');
   state.pendingChallengeSlug = ChallengeService.slugFromLocation();
 
-  try {
-    const health = await api.health();
-    if (health.status === 'error') {
-      showOffline('The trivia service is having trouble right now. Try again in a moment.');
-      return;
+  // A live backend is preferred: it has today's news questions, real
+  // leaderboards and head-to-head challenges. Local play is the fallback, and
+  // the only thing standing between a fresh checkout and a playable game.
+  //
+  // An inlined bank means this is the single-file build, which by construction
+  // has no API to reach — probing for one would only log a failed request.
+  let live = false;
+  if (!window.__TRIVIA_BANK__) {
+    try {
+      const health = await api.health();
+      live = health.status !== 'error';
+    } catch {
+      live = false;
     }
-  } catch {
+  }
+
+  if (!live && !(await enterLocalMode())) {
     showOffline('Trivia needs an internet connection. Check your connection and try again.');
     return;
   }
@@ -112,8 +164,14 @@ async function enterApp() {
   if (state.pendingChallengeSlug) {
     const slug = state.pendingChallengeSlug;
     state.pendingChallengeSlug = null;
-    await openChallenge(slug);
-    return;
+    if (state.local) {
+      // The challenge lives on whichever server issued the link; this copy of
+      // the game has no way to look it up.
+      toast('That challenge link needs the online version of the game.');
+    } else {
+      await openChallenge(slug);
+      return;
+    }
   }
 
   if (window.location.pathname === '/daily') {
@@ -414,11 +472,17 @@ function renderResults(summary) {
   const comparison = role('result-comparison');
   if (comparison) {
     if (summary.comparison) {
-      const { rank, of, playerAhead } = summary.comparison;
-      const lines = [`#${rank} of ${of} among your friends this week`];
+      const { rank, of, playerAhead, scope } = summary.comparison;
+      const lines = [
+        scope === 'personal'
+          ? `Your #${rank} run out of ${of}`
+          : `#${rank} of ${of} among your friends this week`,
+      ];
       if (playerAhead && playerAhead.gap > 0) {
         lines.push(
-          `${playerAhead.displayName} is ${formatNumber(playerAhead.gap)} points ahead of you`,
+          scope === 'personal'
+            ? `${formatNumber(playerAhead.gap)} points off your best`
+            : `${playerAhead.displayName} is ${formatNumber(playerAhead.gap)} points ahead of you`,
         );
       }
       comparison.textContent = lines.join(' · ');
@@ -714,9 +778,11 @@ async function renderLeaderboard() {
       el('li', {
         class: 'empty',
         text:
-          data.scope === 'friends'
-            ? 'Add a friend to see how you compare.'
-            : 'No scores in this period yet — be the first.',
+          data.scope === 'personal'
+            ? 'Finish a game and it will show up here.'
+            : data.scope === 'friends'
+              ? 'Add a friend to see how you compare.'
+              : 'No scores in this period yet — be the first.',
       }),
     );
     return;

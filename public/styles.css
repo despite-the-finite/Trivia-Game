@@ -50,6 +50,26 @@
   }
 }
 
+/* The block above covers "the system prefers light". This one covers "the
+   reader asked for light", which is not the same thing: a reader on a dark
+   system who chooses light matches no colour-scheme query, and without this
+   would be handed the dark palette they just turned down. Keep the two sets of
+   values in step. */
+:root[data-theme='light'] {
+  --bg: #f5f3ff;
+  --bg-elevated: #ffffff;
+  --bg-raised: #efeaff;
+  --surface-border: rgba(30, 20, 70, 0.1);
+  --text: #191533;
+  --text-muted: #57507a;
+  --text-faint: #8c86a8;
+  --accent-soft: rgba(124, 92, 255, 0.12);
+  --shadow: 0 16px 36px -22px rgba(40, 20, 90, 0.5);
+  --gold: #a86a00;
+  --correct: #12855a;
+  --wrong: #d61f43;
+}
+
 *,
 *::before,
 *::after {
@@ -1024,4 +1044,48 @@ button {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* --- Local (no-backend) mode ---------------------------------------------
+   The page runs against an in-browser backend when no server answers. Features
+   that genuinely need a server — friends, global boards, head-to-head
+   challenges, moving an account between devices, and news questions written
+   from live feeds — are marked `data-server-only` and hidden here rather than
+   left in place to fail when tapped. `data-local-only` is the mirror: content
+   that should only appear when there is no server.
+   ------------------------------------------------------------------------- */
+
+[data-local-only] {
+  display: none;
+}
+
+:root[data-mode='local'] [data-server-only] {
+  display: none !important;
+}
+
+:root[data-mode='local'] [data-local-only] {
+  display: block;
+}
+
+.notice {
+  margin: 0 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-muted);
+  font-size: 0.83rem;
+  line-height: 1.5;
+}
+
+.notice a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Friends and Challenge are hidden offline, which would leave the remaining
+   button stranded in a three-column grid. */
+:root[data-mode='local'] .navgrid {
+  grid-template-columns: 1fr;
 }
