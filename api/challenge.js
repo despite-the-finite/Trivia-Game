@@ -1,4 +1,11 @@
-import { createHandler, getQuery, readJsonBody, badRequest, withStatus } from '../backend/lib/http.js';
+import {
+  createHandler,
+  getQuery,
+  readJsonBody,
+  badRequest,
+  withStatus,
+  publicBaseUrl,
+} from '../backend/lib/http.js';
 import { requirePlayer, optionalPlayer } from '../backend/lib/auth.js';
 import { enforceRateLimit } from '../backend/lib/rateLimit.js';
 import { LIMITS } from '../backend/lib/config.js';
@@ -30,7 +37,9 @@ export default createHandler({
     if (action === 'join') {
       const slug = body.slug ?? q.slug;
       if (!slug) throw badRequest('slug is required.');
-      return joinChallenge({ ...player, displayName: player.display_name }, slug);
+      return joinChallenge({ ...player, displayName: player.display_name }, slug, {
+        baseUrl: publicBaseUrl(req),
+      });
     }
 
     if (action !== 'create') throw badRequest('Unknown action. Expected create or join.');
@@ -39,7 +48,12 @@ export default createHandler({
 
     const created = await createChallenge(
       { ...player, displayName: player.display_name },
-      { category: body.category, difficulty: body.difficulty, count: body.count },
+      {
+        category: body.category,
+        difficulty: body.difficulty,
+        count: body.count,
+        baseUrl: publicBaseUrl(req),
+      },
     );
     return withStatus(201, created);
   },
@@ -49,11 +63,11 @@ export default createHandler({
 
     if (q.view === 'mine') {
       const player = await requirePlayer(req);
-      return { challenges: await listChallengesForPlayer(player.id) };
+      return { challenges: await listChallengesForPlayer(player.id, { baseUrl: publicBaseUrl(req) }) };
     }
 
     if (!q.slug) throw badRequest('slug is required.');
     const viewer = await optionalPlayer(req);
-    return getChallengeResults(q.slug, viewer?.id ?? null);
+    return getChallengeResults(q.slug, viewer?.id ?? null, { baseUrl: publicBaseUrl(req) });
   },
 });

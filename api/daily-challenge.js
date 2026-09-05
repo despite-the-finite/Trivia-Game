@@ -1,4 +1,11 @@
-import { createHandler, getQuery, readJsonBody, badRequest, withStatus } from '../backend/lib/http.js';
+import {
+  createHandler,
+  getQuery,
+  readJsonBody,
+  badRequest,
+  withStatus,
+  publicBaseUrl,
+} from '../backend/lib/http.js';
 import { requirePlayer, optionalPlayer } from '../backend/lib/auth.js';
 import {
   getDailyStatus,
@@ -43,7 +50,7 @@ export default createHandler({
     }
 
     const viewer = await optionalPlayer(req);
-    return getDailyStatus(viewer, day);
+    return getDailyStatus(viewer, day, { baseUrl: publicBaseUrl(req) });
   },
 
   async POST(req) {

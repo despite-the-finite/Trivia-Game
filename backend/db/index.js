@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { APP } from '../lib/config.js';
+import { APP, IS_SERVERLESS } from '../lib/config.js';
 
 const { Pool, types } = pg;
 
@@ -9,9 +9,29 @@ types.setTypeParser(20, (v) => (v === null ? null : Number.parseInt(v, 10)));
 types.setTypeParser(1700, (v) => (v === null ? null : Number.parseFloat(v)));
 
 /**
+ * TLS policy for the Postgres connection.
+ *
+ * Hosted Postgres (Neon, Supabase, RDS) presents a certificate from a public
+ * CA, so the certificate is verified by default — an unverified TLS connection
+ * to a database holding player data is a man-in-the-middle waiting to happen.
+ * Two documented escape hatches exist for providers that present a self-signed
+ * certificate: `sslmode=no-verify` in the connection string, or PGSSL_NO_VERIFY=1.
+ * `sslmode=disable` turns TLS off entirely and is for a local server only.
+ */
+export function sslConfig(connectionString = APP.databaseUrl ?? '') {
+  if (/[?&]sslmode=disable\b/.test(connectionString)) return false;
+  const skipVerify =
+    /[?&]sslmode=no-verify\b/.test(connectionString) ||
+    process.env.PGSSL_NO_VERIFY === '1' ||
+    process.env.PGSSL_NO_VERIFY === 'true';
+  return { rejectUnauthorized: !skipVerify };
+}
+
+/**
  * A single pool is reused across warm serverless invocations. `max` is kept
- * small because each function instance holds its own pool; use a pooled
- * connection string (PgBouncer / Neon pooler) in production.
+ * small because every concurrent function instance holds its own pool and a
+ * hosted database has a finite connection budget; use a pooled connection
+ * string (PgBouncer / the Neon or Supabase pooler) in production.
  */
 let pool;
 
@@ -23,14 +43,14 @@ export function getPool() {
     pool = new Pool({
       connectionString: APP.databaseUrl,
       // A background content refresh holds one connection for the duration of
-      // its advisory lock (which spans upstream network I/O), so the pool needs
-      // headroom above the number of categories or player requests starve.
-      max: Number.parseInt(process.env.PGPOOL_MAX ?? '', 10) || 10,
+      // its advisory lock (which spans upstream network I/O), so a long-lived
+      // server needs headroom above the number of categories. A serverless
+      // instance serves one request at a time and should stay frugal, because
+      // the connection budget is shared across every warm instance.
+      max: Number.parseInt(process.env.PGPOOL_MAX ?? '', 10) || (IS_SERVERLESS ? 3 : 10),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
-      ssl: /sslmode=disable/.test(APP.databaseUrl)
-        ? false
-        : { rejectUnauthorized: false },
+      ssl: sslConfig(APP.databaseUrl),
     });
     pool.on('error', (err) => {
       console.error('[db] idle client error', err.message);

@@ -63,7 +63,7 @@ async function materialiseDay(day) {
   return row;
 }
 
-export async function getDailyStatus(player, day = todayUtc()) {
+export async function getDailyStatus(player, day = todayUtc(), { baseUrl } = {}) {
   const daily = await materialiseDay(day);
 
   const attempt = player
@@ -98,7 +98,7 @@ export async function getDailyStatus(player, day = todayUtc()) {
         }
       : null,
     globalStats: { playersCompleted: stats.players, averageScore: stats.average_score },
-    shareUrl: `${APP.publicUrl || ''}/daily`,
+    shareUrl: `${baseUrl ?? APP.publicUrl ?? ''}/daily`,
   };
 }
 
@@ -137,7 +137,7 @@ export async function startDaily(player, day = todayUtc()) {
   return { ...playable, day };
 }
 
-export function buildDailyShareText({ score, correct, total, day }) {
-  const url = `${APP.publicUrl || ''}/daily`;
+export function buildDailyShareText({ score, correct, total, day, baseUrl }) {
+  const url = `${baseUrl ?? APP.publicUrl ?? ''}/daily`;
   return `I scored ${score.toLocaleString('en-US')} on the ${day} Daily Trivia Challenge (${correct}/${total} correct). Can you beat me?\n${url}`;
 }

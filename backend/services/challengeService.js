@@ -19,12 +19,21 @@ import {
  * option placement. Nothing about the comparison depends on client behaviour.
  */
 
-function challengeUrl(slug) {
-  const base = APP.publicUrl || '';
+/**
+ * Absolute link to a challenge.
+ *
+ * `baseUrl` is resolved per request (see publicBaseUrl in lib/http.js) so a
+ * shared link points at whatever origin the player is actually on — the
+ * *.vercel.app URL, a preview deployment, or a custom domain — without anyone
+ * having to keep PUBLIC_BASE_URL in step with the domain. It falls back to the
+ * configured origin, and finally to a site-relative path.
+ */
+function challengeUrl(slug, baseUrl) {
+  const base = baseUrl ?? APP.publicUrl ?? '';
   return `${base}/challenge/${slug}`;
 }
 
-export async function createChallenge(player, { category, difficulty, count } = {}) {
+export async function createChallenge(player, { category, difficulty, count, baseUrl } = {}) {
   const cat = normalizeCategory(category);
   const diff = normalizeDifficulty(difficulty);
   const n = normalizeCount(count, GAME.challengeQuestionCount);
@@ -60,9 +69,9 @@ export async function createChallenge(player, { category, difficulty, count } = 
   );
 
   return {
-    challenge: shapeChallengeMeta(challenge),
-    url: challengeUrl(slug),
-    shareText: buildInviteText(player.displayName ?? player.display_name, challengeUrl(slug)),
+    challenge: shapeChallengeMeta(challenge, baseUrl),
+    url: challengeUrl(slug, baseUrl),
+    shareText: buildInviteText(player.displayName ?? player.display_name, challengeUrl(slug, baseUrl)),
   };
 }
 
@@ -79,7 +88,7 @@ export async function getChallengeBySlug(slug) {
  * Starts (or resumes) the caller's attempt at a challenge. The challenger's own
  * attempt goes through the same path, so both sides play identical sets.
  */
-export async function joinChallenge(player, slug) {
+export async function joinChallenge(player, slug, { baseUrl } = {}) {
   const challenge = await getChallengeBySlug(slug);
   if (new Date(challenge.expires_at) < new Date()) {
     throw conflict('This challenge has expired.');
@@ -99,7 +108,7 @@ export async function joinChallenge(player, slug) {
     const session = await queryOne('SELECT * FROM game_sessions WHERE id = $1', [existing.session_id]);
     if (session && !session.completed_at && new Date(session.expires_at) > new Date()) {
       const questions = await getQuestionsByIds(session.question_ids);
-      return { ...shapeSessionForPlay(session, questions), challenge: shapeChallengeMeta(challenge) };
+      return { ...shapeSessionForPlay(session, questions), challenge: shapeChallengeMeta(challenge, baseUrl) };
     }
   }
 
@@ -121,10 +130,10 @@ export async function joinChallenge(player, slug) {
     [challenge.id, player.id, role, playable.session.id],
   );
 
-  return { ...playable, challenge: shapeChallengeMeta(challenge) };
+  return { ...playable, challenge: shapeChallengeMeta(challenge, baseUrl) };
 }
 
-function shapeChallengeMeta(challenge) {
+function shapeChallengeMeta(challenge, baseUrl) {
   return {
     id: challenge.id,
     slug: challenge.slug,
@@ -133,14 +142,14 @@ function shapeChallengeMeta(challenge) {
     questionCount: challenge.question_ids.length,
     createdAt: challenge.created_at,
     expiresAt: challenge.expires_at,
-    url: challengeUrl(challenge.slug),
+    url: challengeUrl(challenge.slug, baseUrl),
   };
 }
 
 /**
  * Results for a challenge: both scores, accuracy, response times and who won.
  */
-export async function getChallengeResults(slug, viewerId = null) {
+export async function getChallengeResults(slug, viewerId = null, { baseUrl } = {}) {
   const challenge = await getChallengeBySlug(slug);
 
   const participants = await queryRows(
@@ -195,14 +204,14 @@ export async function getChallengeResults(slug, viewerId = null) {
   }
 
   return {
-    challenge: shapeChallengeMeta(challenge),
+    challenge: shapeChallengeMeta(challenge, baseUrl),
     participants: shaped,
     outcome,
-    shareText: buildResultText(shaped, outcome, challengeUrl(challenge.slug)),
+    shareText: buildResultText(shaped, outcome, challengeUrl(challenge.slug, baseUrl)),
   };
 }
 
-export async function listChallengesForPlayer(playerId, limit = 20) {
+export async function listChallengesForPlayer(playerId, { limit = 20, baseUrl } = {}) {
   const rows = await queryRows(
     `SELECT c.slug, c.category, c.created_at, c.expires_at,
             array_length(c.question_ids, 1) AS question_count,
@@ -219,7 +228,7 @@ export async function listChallengesForPlayer(playerId, limit = 20) {
 
   return rows.map((r) => ({
     slug: r.slug,
-    url: challengeUrl(r.slug),
+    url: challengeUrl(r.slug, baseUrl),
     category: r.category,
     questionCount: r.question_count,
     yourScore: r.completed_at ? r.score : null,

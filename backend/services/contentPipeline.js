@@ -1,5 +1,5 @@
 import { query, queryOne, queryRows, withTransaction, withAdvisoryLock, lockKey } from '../db/index.js';
-import { CATEGORIES, FRESHNESS } from '../lib/config.js';
+import { CATEGORIES, CRON, FRESHNESS, IS_SERVERLESS } from '../lib/config.js';
 import newsProvider from '../providers/newsProvider.js';
 import scienceProvider from '../providers/scienceProvider.js';
 import geographyProvider from '../providers/geographyProvider.js';
@@ -37,6 +37,33 @@ const inFlight = new Map();
  * player requests are served from.
  */
 let backgroundChain = Promise.resolve();
+
+/**
+ * Keeps a serverless invocation alive for work started after the response was
+ * sent.
+ *
+ * On a long-lived server a dangling promise simply runs. On Vercel the instance
+ * is frozen the moment the response finishes, so a fire-and-forget refresh would
+ * be suspended mid-flight — leaving a half-written run, a held database
+ * connection and nothing in the logs to explain it. The platform exposes a
+ * `waitUntil` on its per-request context for exactly this; when it is not there
+ * (local dev, tests, another host) the promise is left to run normally, which is
+ * the correct behaviour off-platform.
+ *
+ * @returns {boolean} whether the platform is now holding the invocation open.
+ */
+export function keepAlive(promise) {
+  try {
+    const context = globalThis[Symbol.for('@vercel/request-context')]?.get?.();
+    if (typeof context?.waitUntil === 'function') {
+      context.waitUntil(promise);
+      return true;
+    }
+  } catch {
+    /* No request context available; fall through. */
+  }
+  return false;
+}
 
 export async function poolStatus(category) {
   const row = await queryOne(
@@ -271,20 +298,75 @@ export function refreshInBackground(category) {
     () => undefined,
     () => undefined,
   );
+
+  const held = keepAlive(promise);
+  if (IS_SERVERLESS && !held) {
+    // The platform will not hold the invocation open, so this run would be
+    // frozen part-way through. Say so once: the scheduled refresh is then the
+    // only thing keeping the bank fresh, and that is worth seeing in the logs.
+    console.warn(
+      `[contentPipeline] on-demand refresh for ${category} may be suspended when the response ends; ` +
+        'the scheduled /api/cron/refresh run is the reliable path.',
+    );
+  }
   return promise;
 }
 
-/** Refresh every category whose policy says it is due. Used by the cron job. */
-export async function refreshDueCategories({ force = false } = {}) {
+/**
+ * Orders categories by how overdue they are, most urgent first, so a run that
+ * can only afford one category spends it on the one that needs it most.
+ */
+export async function categoriesByUrgency(categories = CATEGORIES) {
+  const scored = await Promise.all(
+    categories.map(async (category) => {
+      const policy = FRESHNESS[category];
+      const status = await poolStatus(category);
+      const thin = Math.max(policy.targetPool * 0.4, 20);
+      // An empty or thin bank always outranks a merely stale one: a category
+      // with nothing in it is a category players cannot play.
+      const starvation = status.total >= thin ? 0 : (thin - status.total) / thin;
+      const age = status.lastRefreshAt
+        ? Date.now() - new Date(status.lastRefreshAt).valueOf()
+        : Number.POSITIVE_INFINITY;
+      const overdue = age / policy.refreshEveryMs;
+      return { category, urgency: starvation * 10 + Math.min(overdue, 10), overdue, total: status.total };
+    }),
+  );
+  return scored.sort((a, b) => b.urgency - a.urgency);
+}
+
+/**
+ * Refresh the categories whose policy says they are due, most urgent first.
+ *
+ * `limit` exists because each category costs an upstream fetch plus a model
+ * call, and a serverless invocation has a hard wall-clock ceiling. Doing one
+ * category per scheduled run and letting the next run take the next one keeps
+ * every invocation comfortably inside that ceiling. Used by the cron job.
+ */
+export async function refreshDueCategories({ force = false, limit = CRON.categoriesPerRun } = {}) {
   const results = [];
-  for (const category of CATEGORIES) {
+  const ordered = await categoriesByUrgency();
+  let ran = 0;
+
+  for (const { category } of ordered) {
     if (category !== 'geography' && !isLlmEnabled()) {
       results.push({ category, skipped: true, reason: 'llm-not-configured' });
       continue;
     }
+    if (Number.isFinite(limit) && ran >= limit) {
+      results.push({ category, skipped: true, reason: 'deferred-to-next-run' });
+      continue;
+    }
+    if (!force && !(await needsRefresh(category))) {
+      results.push({ category, skipped: true, reason: 'fresh' });
+      continue;
+    }
+
+    ran += 1;
     try {
       results.push(await refreshCategory(category, { force }));
     } catch (err) {
+      console.error(`[contentPipeline] refresh for ${category} failed: ${err.message}`);
       results.push({ category, error: err.message });
     }
   }

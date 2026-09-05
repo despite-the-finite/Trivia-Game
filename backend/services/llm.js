@@ -33,17 +33,26 @@ export const isLlmEnabled = () => LLM.enabled;
 export async function generateJson({ system, prompt, schema, maxTokens, effort }) {
   const anthropic = getClient();
 
-  const response = await anthropic.messages.create({
-    model: LLM.model,
-    max_tokens: maxTokens ?? LLM.maxTokens,
-    system,
-    thinking: { type: 'adaptive' },
-    output_config: {
-      effort: effort ?? LLM.effort,
-      format: { type: 'json_schema', schema },
+  const response = await anthropic.messages.create(
+    {
+      model: LLM.model,
+      max_tokens: maxTokens ?? LLM.maxTokens,
+      system,
+      thinking: { type: 'adaptive' },
+      output_config: {
+        effort: effort ?? LLM.effort,
+        format: { type: 'json_schema', schema },
+      },
+      messages: [{ role: 'user', content: prompt }],
     },
-    messages: [{ role: 'user', content: prompt }],
-  });
+    {
+      // A serverless invocation has a hard wall-clock ceiling and is killed
+      // without an error we can log. Timing out first turns a silent
+      // disappearance into a recorded 'error' row on the refresh run.
+      timeout: LLM.timeoutMs,
+      maxRetries: 1,
+    },
+  );
 
   if (response.stop_reason === 'refusal') {
     throw new Error(

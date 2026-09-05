@@ -253,7 +253,10 @@ button {
 }
 .linkbtn--centered {
   display: block;
-  margin: 18px auto 0;
+  /* Padded to a comfortable thumb target on a phone without changing how the
+     link looks — the underline still sits where the text is. */
+  padding: 11px 12px;
+  margin: 7px auto 0;
 }
 .iconbtn {
   background: var(--bg-raised);

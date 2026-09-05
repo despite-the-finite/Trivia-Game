@@ -65,9 +65,17 @@ async function selectQuestions({ category, difficulty, count, excludeIds = [] })
   }
 
   if (!questions.length) {
-    // Nothing banked at all. Try once, synchronously, so a brand-new deployment
-    // can serve its first game instead of failing forever.
-    await Promise.all(categoriesToCheck.map((cat) => refreshInBackground(cat)));
+    // Nothing banked at all. A refresh is already in flight from the loop above;
+    // wait a little for it so a brand-new deployment can serve its first game
+    // instead of failing forever — but never longer than a serverless function
+    // is allowed to live. Blocking for the whole of an upstream fetch plus a
+    // model call would turn a slow first game into a platform timeout, which
+    // reaches the player as a blank 504 rather than the message below.
+    await Promise.race([
+      Promise.all(categoriesToCheck.map((cat) => refreshInBackground(cat))).catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, GAME.coldStartWaitMs).unref?.()),
+    ]);
+
     const retry = await pickBalancedSet({ category, difficulty, count, excludeIds });
     if (!retry.length) {
       throw unavailable(

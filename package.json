@@ -5,12 +5,13 @@
   "description": "An online-only trivia platform: trivia is generated server-side from live internet sources, cached, and served through a serverless API.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "node scripts/dev-server.js",
     "migrate": "node scripts/migrate.js",
     "refresh": "node scripts/refresh.js",
+    "doctor": "node scripts/doctor.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

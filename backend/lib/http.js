@@ -19,23 +19,69 @@ export const tooManyRequests = (msg = 'Slow down a moment.') =>
   new ApiError(429, 'rate_limited', msg);
 export const unavailable = (msg) => new ApiError(503, 'unavailable', msg);
 
-function resolveOrigin(req) {
+/**
+ * Which cross-origin caller, if any, this response may be shared with.
+ *
+ * The game and its API are same-origin, so the default allowlist is empty and
+ * no CORS grant is issued at all. `ALLOWED_ORIGINS` opens it to named origins;
+ * `*` opens it to any origin, which is only appropriate for a genuinely public
+ * read-only API and never grants credentials.
+ */
+export function resolveOrigin(req) {
   const origin = req.headers?.origin;
   if (!origin) return null;
-  if (APP.allowedOrigins.includes('*')) return origin;
-  return APP.allowedOrigins.includes(origin) ? origin : null;
+  if (!APP.allowedOrigins.length) return null;
+  if (APP.allowedOrigins.includes(origin)) return origin;
+  return APP.allowedOrigins.includes('*') ? '*' : null;
 }
 
 export function applyCors(req, res) {
   const origin = resolveOrigin(req);
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  if (!origin) return;
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Admin-Key');
   res.setHeader('Access-Control-Max-Age', '86400');
+
+  if (origin === '*') return;
+  // Credentials are only ever granted to an explicitly named origin — never to
+  // a reflected one, which would be the same as granting them to everybody.
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+}
+
+/**
+ * The origin this request arrived on, behind Vercel's proxy.
+ *
+ * Used to build absolute share links. `x-forwarded-host` is set by the platform
+ * and is what makes a link correct on the *.vercel.app URL, on a preview
+ * deployment and on a custom domain alike, with no environment variable to keep
+ * in sync. It is proxy-controlled input, so it is only ever used to construct a
+ * link back to ourselves — never to make an authorisation decision.
+ */
+export function requestOrigin(req) {
+  const host = req.headers?.['x-forwarded-host'] ?? req.headers?.host;
+  if (typeof host !== 'string' || !host || !/^[A-Za-z0-9.\-:[\]]+$/.test(host)) return '';
+  const forwardedProto = req.headers?.['x-forwarded-proto'];
+  const proto =
+    typeof forwardedProto === 'string' && forwardedProto
+      ? forwardedProto.split(',')[0].trim()
+      : /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)
+        ? 'http'
+        : 'https';
+  if (proto !== 'http' && proto !== 'https') return '';
+  return `${proto}://${host}`;
+}
+
+/**
+ * The origin to put in a shareable link, most specific source first:
+ * an explicit PUBLIC_BASE_URL, then the request's own origin, then whatever the
+ * platform tells us about this deployment. Returns '' only when nothing knows,
+ * in which case callers fall back to a site-relative path.
+ */
+export function publicBaseUrl(req) {
+  return APP.publicUrl || (req ? requestOrigin(req) : '') || APP.platformUrl || '';
 }
 
 export function sendJson(res, status, body) {

@@ -13,6 +13,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, extname, normalize } from 'node:path';
+import { loadDotEnv } from './load-env.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -20,19 +21,7 @@ const publicDir = join(root, 'public');
 const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 
 // Load .env if present, so `npm run dev` picks up local credentials.
-try {
-  const env = await readFile(join(root, '.env'), 'utf8');
-  for (const line of env.split('\n')) {
-    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!match) continue;
-    const [, key, rawValue] = match;
-    if (process.env[key] !== undefined) continue;
-    process.env[key] = rawValue.replace(/^["']|["']$/g, '');
-  }
-  console.log('Loaded .env');
-} catch {
-  /* no .env, rely on the ambient environment */
-}
+if (await loadDotEnv(join(root, '.env'))) console.log('Loaded .env');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

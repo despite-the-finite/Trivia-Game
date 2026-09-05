@@ -71,8 +71,8 @@ export async function getLeaderboard({ period, scope, board, limit, viewerId }) 
          JOIN player_stats s ON s.player_id = p.id
         WHERE ${metric} IS NOT NULL
         ORDER BY value DESC NULLS LAST, s.questions_answered DESC
-        LIMIT ${limit}`,
-      params,
+        LIMIT $${params.length + 1}`,
+      [...params, limit],
     );
 
     return {
@@ -91,8 +91,19 @@ export async function getLeaderboard({ period, scope, board, limit, viewerId }) 
     };
   }
 
-  const categoryClause =
-    board === 'overall' ? '' : `AND e.category = '${board.replace(/'/g, '')}'`;
+  // `board` and `limit` are already constrained to an allowlist and a clamped
+  // integer by parseLeaderboardParams, but they still travel as bind parameters
+  // rather than as interpolated text: nothing user-supplied should reach the
+  // SQL string, so that a future caller that forgets to validate cannot open an
+  // injection. `periodClause` is a constant looked up from PERIOD_SQL.
+  const queryParams = [...params];
+  let categoryClause = '';
+  if (board !== 'overall') {
+    queryParams.push(board);
+    categoryClause = `AND e.category = $${queryParams.length}`;
+  }
+  queryParams.push(limit);
+  const limitParam = `$${queryParams.length}`;
 
   const rows = await queryRows(
     `${audience}
@@ -109,8 +120,8 @@ export async function getLeaderboard({ period, scope, board, limit, viewerId }) 
       GROUP BY p.id, p.display_name
      HAVING COALESCE(SUM(e.points), 0) > 0 OR p.id = ${scope === 'friends' ? '$1' : 'NULL'}
       ORDER BY value DESC, p.display_name ASC
-      LIMIT ${limit}`,
-    params,
+      LIMIT ${limitParam}`,
+    queryParams,
   );
 
   return {
@@ -154,8 +165,8 @@ export async function getDailyLeaderboard({ day, scope = 'global', viewerId, lim
        JOIN audience a ON a.id = p.id
       WHERE s.mode = 'daily' AND s.daily_date = $1 AND s.completed_at IS NOT NULL
       ORDER BY s.total_score DESC, answer_ms ASC
-      LIMIT ${Math.min(Math.max(Number(limit) || 50, 1), 100)}`,
-    params,
+      LIMIT $${params.length + 1}`,
+    [...params, Math.min(Math.max(Number(limit) || 50, 1), 100)],
   );
 
   return rows.map((r, i) => ({
