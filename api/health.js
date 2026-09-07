@@ -18,21 +18,43 @@ export default createHandler({
   async GET() {
     const started = Date.now();
     let database = 'ok';
+    let schema = 'ok';
     let pools = [];
 
+    // Reaching the database and having the tables in it are separate failures
+    // with completely different fixes, so they are checked separately. Rolling
+    // them together reports a fresh, correctly-configured deployment as a
+    // connection error and sends the operator hunting for the wrong problem.
     try {
       await queryOne('SELECT 1');
-      pools = await Promise.all(CATEGORIES.map((c) => poolStatus(c)));
     } catch (err) {
-      // The message here is a connection diagnostic (host unreachable, TLS
-      // rejected, database missing), not a credential.
+      // A connection diagnostic (host unreachable, TLS rejected, bad
+      // credentials), never the credential itself.
       database = `error: ${err.message}`;
+      schema = 'unknown';
+    }
+
+    if (database === 'ok') {
+      try {
+        pools = await Promise.all(CATEGORIES.map((c) => poolStatus(c)));
+      } catch (err) {
+        schema = /does not exist/i.test(err.message) ? 'missing' : `error: ${err.message}`;
+      }
     }
 
     const totalQuestions = pools.reduce((sum, p) => sum + p.total, 0);
     const notes = configProblems();
-    if (database === 'ok' && totalQuestions === 0) {
-      notes.push('The question bank is empty. Run `npm run refresh -- --force` to populate it.');
+
+    if (schema === 'missing') {
+      notes.push(
+        'The database is reachable but its tables have not been created yet. ' +
+          'Open /setup.html and run step 1, or run `npm run migrate` locally.',
+      );
+    } else if (database === 'ok' && schema === 'ok' && totalQuestions === 0) {
+      notes.push(
+        'The question bank is empty. Open /setup.html and run step 2, ' +
+          'or run `npm run refresh -- --force` locally.',
+      );
     }
     if (!APP.cronSecret) {
       notes.push('CRON_SECRET is not set, so the scheduled content refresh is disabled.');
@@ -43,8 +65,13 @@ export default createHandler({
 
     return {
       status:
-        database !== 'ok' ? 'error' : totalQuestions > 0 ? 'ok' : 'degraded',
+        database !== 'ok' || schema !== 'ok'
+          ? 'error'
+          : totalQuestions > 0
+            ? 'ok'
+            : 'degraded',
       database,
+      schema,
       llmConfigured: LLM.enabled,
       cronConfigured: Boolean(APP.cronSecret),
       totalQuestions,

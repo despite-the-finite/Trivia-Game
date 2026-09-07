@@ -1,0 +1,24 @@
+/* Styles for the one-time setup page. Kept in its own file rather than
+   inline so the site's Content-Security-Policy can stay free of
+   'unsafe-inline' — nothing in public/ needs it. */
+/* This page is a one-time operator tool, not part of the game, so it
+   borrows the palette but none of the game's layout. */
+.setup { max-width: 620px; margin: 0 auto; padding: 24px 0 64px; }
+.setup h1 { font-size: 26px; margin: 0 0 6px; }
+.setup .sub { color: var(--text-muted); margin: 0 0 26px; }
+.step { background: var(--bg-elevated); border: 1px solid var(--surface-border);
+        border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+.step h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 9px; }
+.step p { color: var(--text-muted); font-size: 14px; margin: 0 0 14px; }
+.num { display: grid; place-items: center; width: 24px; height: 24px; flex: none;
+       border-radius: 50%; background: var(--accent-soft); color: var(--accent-strong);
+       font-size: 12px; font-weight: 700; }
+.step[data-done="true"] .num { background: var(--correct-soft); color: var(--correct); }
+.out { margin-top: 13px; padding: 11px 13px; border-radius: var(--radius-sm);
+       font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.out.ok   { background: var(--correct-soft); color: var(--correct); }
+.out.bad  { background: var(--wrong-soft);   color: var(--wrong); }
+.out.info { background: var(--bg-raised);    color: var(--text-muted); }
+.setup .field { margin-bottom: 14px; }
+.setup .note { color: var(--text-faint); font-size: 12.5px; margin-top: 20px; line-height: 1.6; }
+.btn[disabled] { opacity: 0.5; pointer-events: none; }

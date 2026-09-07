@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#12101c" />
+    <title>Set up Live Trivia</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/setup.css" />
+  </head>
+  <body>
+    <div class="setup">
+      <h1>Set up Live Trivia</h1>
+      <p class="sub">
+        Two one-time steps to make a fresh deployment playable. You can close this
+        page afterwards and never come back to it.
+      </p>
+
+      <div class="step">
+        <h2><span class="num">0</span> Your setup key</h2>
+        <p>
+          This is the <code>CRON_SECRET</code> value from your Vercel environment
+          variables. It is sent as a request header, so it never appears in the
+          address bar or in your browser history, and it is not stored anywhere.
+        </p>
+        <label class="field">
+          <span class="field__label">CRON_SECRET</span>
+          <input class="field__input" type="password" id="secret" autocomplete="off"
+                 spellcheck="false" placeholder="paste it here" />
+        </label>
+        <button class="btn btn--secondary btn--block" id="check">CHECK CONNECTION</button>
+        <div class="out info" id="out-check" hidden></div>
+      </div>
+
+      <div class="step" id="step-migrate">
+        <h2><span class="num">1</span> Create the tables</h2>
+        <p>
+          Applies the database schema. Safe to run more than once — it only ever
+          creates what is missing and never drops or rewrites anything, so your
+          players and scores are never at risk.
+        </p>
+        <button class="btn btn--primary btn--block" id="migrate">CREATE TABLES</button>
+        <div class="out info" id="out-migrate" hidden></div>
+      </div>
+
+      <div class="step" id="step-seed">
+        <h2><span class="num">2</span> Add the first questions</h2>
+        <p>
+          Geography needs no API key — its answers come from public geographic
+          datasets. This takes up to a minute. Run it again for Science or Current
+          Events once <code>ANTHROPIC_API_KEY</code> is set.
+        </p>
+        <div class="chipgrid chipgrid--tight" id="cats">
+          <button class="chip chip--small is-selected" data-category="geography">Geography</button>
+          <button class="chip chip--small" data-category="science">Science</button>
+          <button class="chip chip--small" data-category="current-events">Current Events</button>
+        </div>
+        <button class="btn btn--primary btn--block" id="seed">ADD QUESTIONS</button>
+        <div class="out info" id="out-seed" hidden></div>
+      </div>
+
+      <p class="note">
+        Prefer a terminal? <code>npm run migrate</code> and
+        <code>npm run refresh -- --force</code> do exactly the same thing from a
+        clone of the repository. This page exists so that neither is required.
+      </p>
+    </div>
+    <script type="module" src="/setup.js"></script>
+  </body>
+</html>

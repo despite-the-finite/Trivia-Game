@@ -237,19 +237,30 @@ test('no secret is referenced from client-side code', async () => {
     return out;
   };
 
+  const SECRET_NAMES = ['ANTHROPIC_API_KEY', 'DATABASE_URL', 'CRON_SECRET', 'TRIVIA_ADMIN_KEY'];
+
   for (const file of await walk(dir)) {
     const text = await readFile(file, 'utf8');
-    for (const name of [
-      'ANTHROPIC_API_KEY',
-      'DATABASE_URL',
-      'CRON_SECRET',
-      'TRIVIA_ADMIN_KEY',
-      'process.env',
-    ]) {
-      assert.ok(
-        !text.includes(name),
-        `${file} references ${name}. Nothing in public/ may touch a server secret — ` +
-          'everything there is downloaded by the browser.',
+
+    // Server environment is unreachable from a browser, so any attempt to read
+    // it is either dead code or a misunderstanding worth catching.
+    assert.ok(
+      !text.includes('process.env'),
+      `${file} reads process.env. Nothing in public/ runs on the server.`,
+    );
+
+    // Naming a variable in help text is fine and often necessary — setup.html
+    // has to tell the operator which value to paste. What must never appear is
+    // a secret being *given a value*: an assignment, a JSON field, or an
+    // embedded literal, any of which would ship the value to every visitor.
+    for (const name of SECRET_NAMES) {
+      const assigned = new RegExp(`${name}\\s*[=:]\\s*['"\`]?[^\\s'"\`<>]`);
+      const match = text.match(assigned);
+      assert.equal(
+        match,
+        null,
+        `${file} appears to assign a value to ${name}: "${match?.[0]}". A server secret ` +
+          'must never be embedded in anything the browser downloads.',
       );
     }
   }
@@ -499,6 +510,96 @@ test('an unauthenticated refresh is refused before any work is done', async () =
 });
 
 // ---------------------------------------------------------------------------
+// The browser setup route
+//
+// It applies a schema and can spend money at the model provider, so its gate
+// gets the same scrutiny as the cron endpoint's.
+// ---------------------------------------------------------------------------
+
+test('setup refuses every request it cannot authenticate', async (t) => {
+  const secret = 'setup-secret-0123456789abcdefgh';
+  const saved = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = secret;
+  t.after(() => {
+    if (saved === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = saved;
+  });
+
+  const handler = (await import(`../api/setup.js?auth=${Date.now()}`)).default;
+
+  const post = async (headers) => {
+    const res = { ...fakeRes(), statusCode: 200, body: '' };
+    res.setHeader = (k, v) => { res.headers[k] = v; };
+    res.end = (chunk) => { res.body = chunk ?? ''; };
+    // No DATABASE_URL is touched: a refused request never reaches the database.
+    await handler({ method: 'POST', headers, url: '/api/setup?action=migrate', query: { action: 'migrate' } }, res);
+    return res;
+  };
+
+  for (const headers of [
+    {},
+    { 'x-vercel-cron': '1' },
+    { authorization: 'Bearer wrong' },
+    { authorization: `Bearer ${secret.slice(0, 10)}` },
+    { authorization: secret },
+  ]) {
+    const res = await post(headers);
+    assert.equal(res.statusCode, 403, `headers ${JSON.stringify(headers)} must not reach the schema`);
+    assert.equal(JSON.parse(res.body).error.code, 'forbidden');
+  }
+});
+
+test('setup is disabled entirely when no CRON_SECRET is configured', async (t) => {
+  const saved = process.env.CRON_SECRET;
+  delete process.env.CRON_SECRET;
+  t.after(() => {
+    if (saved !== undefined) process.env.CRON_SECRET = saved;
+  });
+
+  const handler = (await import(`../api/setup.js?nosecret=${Date.now()}`)).default;
+  const res = { ...fakeRes(), statusCode: 200, body: '' };
+  res.setHeader = (k, v) => { res.headers[k] = v; };
+  res.end = (chunk) => { res.body = chunk ?? ''; };
+
+  await handler({ method: 'POST', headers: {}, url: '/api/setup', query: {} }, res);
+  assert.equal(res.statusCode, 403);
+  assert.match(JSON.parse(res.body).error.message, /CRON_SECRET/);
+});
+
+test('setup only accepts POST, so no link or crawler can trigger it', async () => {
+  const handler = (await import('../api/setup.js')).default;
+  const res = { ...fakeRes(), statusCode: 200, body: '' };
+  res.setHeader = (k, v) => { res.headers[k] = v; };
+  res.end = (chunk) => { res.body = chunk ?? ''; };
+
+  await handler({ method: 'GET', headers: {}, url: '/api/setup' }, res);
+  assert.equal(res.statusCode, 405);
+});
+
+test('schema.sql ships with the setup function and is safe to re-run', async () => {
+  const config = await readJson('vercel.json');
+  assert.equal(
+    config.functions['api/setup.js']?.includeFiles,
+    'backend/db/schema.sql',
+    'setup reads schema.sql by path at runtime; Vercel only traces imports, so it ' +
+      'must be listed under includeFiles or it will be missing from the bundle.',
+  );
+
+  const sql = await readFile(join(root, 'backend/db/schema.sql'), 'utf8');
+  // Applying this from a web request is only defensible because it cannot
+  // destroy anything.
+  assert.ok(!/\bDROP\s+(TABLE|DATABASE|SCHEMA|COLUMN)\b/i.test(sql), 'schema.sql must not drop anything');
+  assert.ok(!/\bTRUNCATE\b/i.test(sql), 'schema.sql must not truncate anything');
+  for (const table of ['players', 'questions', 'game_sessions']) {
+    assert.match(
+      sql,
+      new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`),
+      `${table} must be created only if missing, so a re-run is a no-op`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
 
@@ -521,6 +622,9 @@ test('health reports a missing database as an error instead of crashing', async 
   const body = JSON.parse(res.body);
   assert.equal(body.status, 'error');
   assert.match(body.database, /^error: /);
+  // Reaching the database and having tables in it are different failures with
+  // different fixes, and health has to tell them apart.
+  assert.equal(body.schema, 'unknown', 'schema state is unknowable when the connection failed');
   assert.match(body.notes.join(' '), /DATABASE_URL/, 'it should say what is missing');
   assert.equal(typeof body.llmConfigured, 'boolean');
   assert.equal(typeof body.cronConfigured, 'boolean');

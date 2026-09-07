@@ -228,9 +228,33 @@ On Windows without `openssl`, in PowerShell:
 
 Paste the result as the value of `CRON_SECRET`. You never need to type it again.
 
-### 10. Run the database migration
+### 10 & 11. Create the tables and the first questions
 
-This creates the tables. **You run this once, from your own computer**, pointed
+A new database is empty in two ways: it has no tables, and no questions. Both
+are one-time jobs. There are two ways to do them — pick either.
+
+#### The easy way: the setup page (no terminal needed)
+
+Once the deployment is live, open:
+
+```
+https://<your-project>.vercel.app/setup.html
+```
+
+Paste your `CRON_SECRET` into the box, then press the two buttons in order:
+**CREATE TABLES**, then **ADD QUESTIONS** (Geography is selected by default and
+needs no API key). Each one reports what it did.
+
+The key is sent as a request header, so it never lands in the address bar, your
+browser history, or a server log. Nothing on that page works without it, so the
+page is harmless to leave deployed.
+
+Use this if you would rather not install Node. The rest of this section is the
+equivalent from a terminal, and does exactly the same work.
+
+#### The terminal way
+
+This creates the tables. You run it once, from your own computer, pointed
 at the hosted database. Vercel does not do it for you.
 
 ```bash
@@ -250,11 +274,9 @@ On Windows PowerShell, use `$env:DATABASE_URL='…'` instead of `export`.
 `npm run migrate` is safe to run again at any time: every statement is guarded,
 and it never drops or rewrites a table, so it will not delete players or scores.
 
-### 11. Populate the first trivia questions
-
-The app serves from a bank of pre-generated questions. A brand new database has
-an empty bank, so nobody can play yet. Fill it from your own computer, with the
-same `DATABASE_URL` still set:
+Then populate the questions. The app serves from a bank of pre-generated
+questions, so until this runs there is nothing to play. With the same
+`DATABASE_URL` still set:
 
 ```bash
 export ANTHROPIC_API_KEY='sk-ant-…'     # skip this line for Geography only
@@ -361,6 +383,11 @@ Remove it; the Node version comes from `engines.node` in `package.json`.
 **The build fails with "Hobby accounts are limited to daily cron jobs".**
 The cron schedule in `vercel.json` fires more than once a day. Change it back to
 a single fixed time, e.g. `"0 6 * * *"`.
+
+**`/api/health` says `"schema": "missing"`, or `relation "questions" does not exist`.**
+The database is reachable — the credentials are right — but the tables have not
+been created. Open `/setup.html` and press **CREATE TABLES**, or run
+`npm run migrate` locally. This is the expected state of a brand new database.
 
 **Playing says "No trivia is available right now".**
 The bank is empty. Run step 11. Confirm with `npm run doctor`.
@@ -517,6 +544,7 @@ creation; only its SHA-256 is stored.
 | `GET /api/challenge?slug=` | Challenge results and share text |
 | `GET/POST /api/daily-challenge` | Today's challenge, `?view=leaderboard` for its board |
 | `GET /api/cron/refresh` | Scheduled content generation (requires `CRON_SECRET`) |
+| `POST /api/setup` | One-time deployment setup — `?action=status\|migrate\|seed`. Same `CRON_SECRET` gate; backs the `/setup.html` page so a new deployment can be prepared without a terminal |
 | `GET /api/health` | Used by the frontend on boot to decide whether to show the offline screen, and as the deployment's own status page: it names what is missing without echoing any secret |
 
 `GET /api/trivia` returns the shape the spec asks for — `id`, `category`,
@@ -577,6 +605,7 @@ backend/
                playerService, sessionService, leaderboardService,
                challengeService, dailyChallengeService, llm
 public/
+  setup.html   one-time deployment setup (schema + first questions)
   js/services/ TriviaService, PlayerService, LeaderboardService,
                ChallengeService, ShareService, ApiClient
   js/ui/       DOM helpers
