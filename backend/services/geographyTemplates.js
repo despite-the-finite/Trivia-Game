@@ -11,6 +11,13 @@ import { shuffle } from '../lib/ids.js';
 
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
+/**
+ * The largest share of one batch any single question family may occupy. There
+ * are eleven families, so a fifth is generous while still guaranteeing at least
+ * five distinct kinds of question in a full batch.
+ */
+const FAMILY_SHARE = Number.parseFloat(process.env.GEOGRAPHY_FAMILY_SHARE ?? '') || 0.2;
+
 function sampleDistinct(pool, count, rng, exclude = new Set()) {
   const candidates = pool.filter((v) => !exclude.has(v));
   if (candidates.length < count) return null;
@@ -274,8 +281,18 @@ export function buildGeographyQuestions(records, rng = Math.random, limit = 120)
 
   // Build in random order and stop once we have enough, so successive refreshes
   // surface different slices of the dataset.
+  //
+  // The per-family ceiling is the reason a run cannot turn into twenty rounds of
+  // "which of these mountains is the highest". Shuffling alone does not prevent
+  // that: whichever family has the most builders wins the draw, and if a dataset
+  // fails to load the survivors take the whole batch. A family is the part of
+  // the topic before the first colon — capital, border, currency, peak-height
+  // and so on.
   const out = [];
   const seenTopics = new Set();
+  const familyCounts = new Map();
+  const familyCeiling = Math.max(1, Math.ceil(limit * FAMILY_SHARE));
+
   for (const build of shuffle(builders, rng)) {
     if (out.length >= limit) break;
     let candidate;
@@ -287,11 +304,15 @@ export function buildGeographyQuestions(records, rng = Math.random, limit = 120)
     if (!candidate) continue;
     if (seenTopics.has(candidate.topic)) continue;
 
+    const family = String(candidate.topic).split(':')[0];
+    if ((familyCounts.get(family) ?? 0) >= familyCeiling) continue;
+
     const answers = [candidate.correctAnswer, ...candidate.distractors];
     if (new Set(answers.map((a) => String(a).toLowerCase())).size !== answers.length) continue;
     if (answers.some((a) => typeof a !== 'string' || !a.trim())) continue;
 
     seenTopics.add(candidate.topic);
+    familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
     out.push(candidate);
   }
   return out;

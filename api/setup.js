@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { createHandler, getQuery, forbidden, badRequest } from '../backend/lib/http.js';
+import { createHandler, getQuery, forbidden, badRequest, unavailable } from '../backend/lib/http.js';
 import { timingSafeEqual } from '../backend/lib/auth.js';
 import { APP, CATEGORIES } from '../backend/lib/config.js';
-import { getPool, queryOne } from '../backend/db/index.js';
+import { getPool, queryOne, query } from '../backend/db/index.js';
 import { refreshCategory, poolStatus } from '../backend/services/contentPipeline.js';
 
 /**
@@ -15,6 +15,7 @@ import { refreshCategory, poolStatus } from '../backend/services/contentPipeline
  *   ?action=status     what state is this database in?
  *   ?action=migrate    apply backend/db/schema.sql
  *   ?action=seed&category=geography   generate the first questions
+ *   ?action=seed&...&replace=1        retire what is already banked first
  *
  * This exists because the alternative — install Node, clone the repo, run two
  * npm scripts — is a real wall for someone deploying their own copy, and the
@@ -111,11 +112,37 @@ export default createHandler({
         throw badRequest('Run the migrate step first — there are no tables to write into yet.');
       }
 
-      const result = await refreshCategory(category, { force: true });
+      // Retiring rather than deleting: the rows stay for audit, and every read
+      // path already filters on `active`, so they stop being served the moment
+      // this runs. Used when a batch was generated from bad source data and
+      // would otherwise sit in the bank until its TTL expired weeks later.
+      let retired = 0;
+      if (q.replace === '1' || q.replace === 'true') {
+        const { rowCount } = await query(
+          'UPDATE questions SET active = FALSE WHERE category = $1 AND active',
+          [category],
+        );
+        retired = rowCount;
+        console.log(`[setup] retired ${retired} existing ${category} question(s)`);
+      }
+
+      // A failed seed is the one error on this page the operator most needs to
+      // read: it names the upstream source that would not load. The generic
+      // handler would flatten it to "something went wrong", which is exactly
+      // the diagnosis this page exists to avoid. Upstream URLs and HTTP
+      // statuses carry no secrets, and the caller is already authenticated.
+      let result;
+      try {
+        result = await refreshCategory(category, { force: true });
+      } catch (err) {
+        console.error(`[setup] seed ${category} failed: ${err.message}`);
+        throw unavailable(`Could not build ${category} questions. ${err.message}`);
+      }
       console.log(`[setup] seed ${category}: ${JSON.stringify(result)}`);
       return {
         action,
         category,
+        retired,
         result,
         pools: await Promise.all(CATEGORIES.map((c) => poolStatus(c))),
       };

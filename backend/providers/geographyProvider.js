@@ -1,4 +1,4 @@
-import { fetchJson, settleAll } from '../lib/fetchUtil.js';
+import { fetchJson } from '../lib/fetchUtil.js';
 import { sha256 } from '../lib/ids.js';
 
 /**
@@ -12,9 +12,39 @@ import { sha256 } from '../lib/ids.js';
  * answer.
  */
 
+/**
+ * REST Countries caps `fields` on the /all endpoint at TEN, and returns 400 for
+ * both a missing and an over-long list. Exactly ten are requested here, so this
+ * has no headroom: adding one more silently costs the entire countries dataset,
+ * and with it every capital, border, currency, language, population and area
+ * question. A test asserts the count.
+ *
+ * What was dropped to fit, and why it is safe:
+ *   flags       — unused; answer options are text only.
+ *   subregion   — appears in one explanation, which reads fine without it.
+ *   independent — `unMember` alone is the sovereignty filter now. UN membership
+ *                 is a crisper and less disputed line than the `independent`
+ *                 flag, and it is the one that keeps territories out of
+ *                 "what is the capital of X?".
+ */
+const REST_COUNTRIES_FIELDS = [
+  'name',
+  'cca3',
+  'capital',
+  'population',
+  'area',
+  'region',
+  'borders',
+  'currencies',
+  'languages',
+  'unMember',
+];
+
+export const REST_COUNTRIES_FIELD_LIMIT = 10;
+
 const REST_COUNTRIES_URL =
   process.env.REST_COUNTRIES_URL ||
-  'https://restcountries.com/v3.1/all?fields=name,cca3,capital,population,area,region,subregion,borders,currencies,languages,flags,independent,unMember';
+  `https://restcountries.com/v3.1/all?fields=${REST_COUNTRIES_FIELDS.join(',')}`;
 
 const WIKIDATA_SPARQL = process.env.WIKIDATA_SPARQL_URL || 'https://query.wikidata.org/sparql';
 
@@ -30,7 +60,7 @@ async function collectCountries() {
   if (!Array.isArray(raw)) throw new Error('REST Countries returned an unexpected payload');
 
   return raw
-    .filter((c) => c?.name?.common && c.unMember && c.independent)
+    .filter((c) => c?.name?.common && c.unMember)
     .map((c) => ({
       kind: 'country',
       name: c.name.common,
@@ -40,7 +70,7 @@ async function collectCountries() {
       population: Number.isFinite(c.population) ? c.population : null,
       area: Number.isFinite(c.area) ? c.area : null,
       region: c.region ?? null,
-      subregion: c.subregion ?? null,
+      subregion: null,
       borders: Array.isArray(c.borders) ? c.borders : [],
       currencies: c.currencies
         ? Object.entries(c.currencies).map(([code, v]) => ({ code, name: v?.name ?? code }))
@@ -106,13 +136,18 @@ async function collectRivers() {
     });
 }
 
-const DATASETS = [
+export const DATASETS = [
   {
     id: 'rest-countries',
     sourceName: 'REST Countries',
     url: 'https://restcountries.com/',
     title: 'Country reference data (capitals, populations, borders, currencies, languages)',
     load: collectCountries,
+    // Countries carry eight of the eleven question shapes. Without them a
+    // batch collapses into "which mountain is highest" and "which river is
+    // longest", which is a worse outcome than no batch at all — a bad batch is
+    // cached for weeks and is what players actually see.
+    required: true,
   },
   {
     id: 'wikidata-peaks',
@@ -136,14 +171,42 @@ const DATASETS = [
  */
 export async function collect() {
   const now = new Date();
-  const loaded = await settleAll(
-    DATASETS.map((dataset) => async () => {
-      const records = await dataset.load();
-      if (!records.length) throw new Error(`${dataset.id} returned no rows`);
-      return { dataset, records };
+
+  // Deliberately NOT settleAll here. Swallowing a per-dataset failure makes a
+  // partially-loaded run indistinguishable from a healthy one: the pipeline
+  // reports "accepted 120 questions" and nobody learns that two thirds of the
+  // variety never arrived. Failures are collected and reported instead.
+  const results = await Promise.all(
+    DATASETS.map(async (dataset) => {
+      try {
+        const records = await dataset.load();
+        if (!records.length) throw new Error('returned no rows');
+        return { dataset, records };
+      } catch (err) {
+        console.warn(`[geographyProvider] ${dataset.id} failed: ${err.message}`);
+        return { dataset, error: err.message };
+      }
     }),
-    { concurrency: 3, label: 'geographyProvider' },
   );
+
+  const loaded = results.filter((r) => r.records);
+  const failed = results.filter((r) => r.error);
+
+  const missingRequired = failed.filter((r) => r.dataset.required);
+  if (missingRequired.length) {
+    throw new Error(
+      `geography source data incomplete — ${missingRequired
+        .map((r) => `${r.dataset.id} (${r.error})`)
+        .join('; ')}. Refusing to build a batch from the remaining datasets, which ` +
+        'would produce only superlative questions.',
+    );
+  }
+  if (!loaded.length) throw new Error('no geography dataset could be loaded');
+  if (failed.length) {
+    console.warn(
+      `[geographyProvider] continuing without: ${failed.map((r) => r.dataset.id).join(', ')}`,
+    );
+  }
 
   return loaded.map(({ dataset, records }) => ({
     provider: 'geographyProvider',

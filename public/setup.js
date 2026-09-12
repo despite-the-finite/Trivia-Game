@@ -79,12 +79,15 @@ for (const chip of document.querySelectorAll('#cats .chip')) {
 
 $('seed').addEventListener('click', () =>
   run($('seed'), 'out-seed', async (out) => {
-    const data = await call('seed', { category });
+    const params = { category };
+    if (document.getElementById('replace').checked) params.replace = '1';
+    const data = await call('seed', params);
     const total = data.pools.reduce((sum, p) => sum + p.total, 0);
     const r = data.result ?? {};
+    const retired = data.retired ? `Retired ${data.retired} old question(s). ` : '';
     const detail = r.skipped
       ? `Skipped (${r.reason}).`
-      : `Accepted ${r.accepted} of ${r.generated} generated, ${r.rejected} rejected.`;
+      : `${retired}Accepted ${r.accepted} of ${r.generated} generated, ${r.rejected} rejected.`;
     show(
       out,
       `${detail} The bank now holds ${total} question(s) across all categories.` +

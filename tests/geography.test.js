@@ -180,3 +180,94 @@ test('friend codes round-trip through normalisation', () => {
   assert.equal(normalizeFriendCode(code.toLowerCase().replace('-', ' ')), code);
   assert.equal(normalizeFriendCode('nope'), null);
 });
+
+// ---------------------------------------------------------------------------
+// Batch variety
+//
+// A deployment shipped a bank made entirely of "which mountain is highest" and
+// "which river is longest", because the countries dataset failed to load and
+// nothing noticed. These cover both halves of that: the fetch that failed, and
+// the batch shape that let the survivors take everything.
+// ---------------------------------------------------------------------------
+
+const familyCounts = (questions) => {
+  const counts = new Map();
+  for (const q of questions) {
+    const family = q.topic.split(':')[0];
+    counts.set(family, (counts.get(family) ?? 0) + 1);
+  }
+  return counts;
+};
+
+function fakeCountries(n = 120) {
+  const regions = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania'];
+  return Array.from({ length: n }, (_, i) => ({
+    kind: 'country',
+    name: `Country ${i}`,
+    code: `C${String(i).padStart(3, '0')}`,
+    capital: `Capital ${i}`,
+    population: (n * 2 - i) * 1_000_000,
+    area: (n * 2 - i) * 10_000,
+    region: regions[i % regions.length],
+    subregion: null,
+    borders: [`C${String((i + 1) % n).padStart(3, '0')}`],
+    currencies: [{ code: `X${i}`, name: `Currency ${i}` }],
+    languages: [`Language ${i}`],
+  }));
+}
+
+const fakePeaks = (n = 120) =>
+  Array.from({ length: n }, (_, i) => ({
+    kind: 'mountain', name: `Peak ${i}`, elevation: 8800 - i * 20, country: `Country ${i % 12}`,
+  }));
+
+const fakeRivers = (n = 100) =>
+  Array.from({ length: n }, (_, i) => ({
+    kind: 'river', name: `River ${i}`, lengthKm: 6500 - i * 30, continent: 'Asia',
+  }));
+
+test('no single question type can dominate a batch', () => {
+  const records = [...fakeCountries(), ...fakePeaks(), ...fakeRivers()];
+  const built = buildGeographyQuestions(records, seededRandom('variety'), 120);
+
+  assert.ok(built.length >= 100, `expected a full batch, got ${built.length}`);
+
+  const counts = familyCounts(built);
+  const largest = Math.max(...counts.values());
+  assert.ok(
+    largest / built.length <= 0.21,
+    `one family took ${Math.round((largest / built.length) * 100)}% of the batch: ` +
+      [...counts].map(([f, n]) => `${f}=${n}`).join(' '),
+  );
+  assert.ok(counts.size >= 5, `expected at least 5 kinds of question, got ${counts.size}`);
+});
+
+test('losing a dataset shrinks the batch rather than making it repetitive', () => {
+  // Exactly the state that produced the bad bank: peaks and rivers only.
+  const built = buildGeographyQuestions([...fakePeaks(), ...fakeRivers()], seededRandom('partial'), 120);
+  const counts = familyCounts(built);
+  const largest = Math.max(...counts.values());
+
+  assert.ok(
+    largest / 120 <= 0.21,
+    'even with only superlative data available, no family may fill the batch',
+  );
+  assert.ok(
+    built.length < 120,
+    'a short batch is the correct outcome here — padding it means repeating one question shape',
+  );
+});
+
+test('every question family stays reachable', () => {
+  const records = [...fakeCountries(), ...fakePeaks(), ...fakeRivers()];
+  // A large limit so the ceiling is not what is being measured.
+  const built = buildGeographyQuestions(records, seededRandom('families'), 600);
+  const families = new Set([...familyCounts(built).keys()]);
+
+  for (const expected of [
+    'capital', 'capital-of', 'region', 'area', 'border',
+    'currency', 'language', 'peak-height', 'peak-country', 'river-length',
+  ]) {
+    assert.ok(families.has(expected), `no ${expected} questions were produced at all`);
+  }
+});

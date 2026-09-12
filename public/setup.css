@@ -22,3 +22,6 @@
 .setup .field { margin-bottom: 14px; }
 .setup .note { color: var(--text-faint); font-size: 12.5px; margin-top: 20px; line-height: 1.6; }
 .btn[disabled] { opacity: 0.5; pointer-events: none; }
+
+/* The replace toggle sits between the category chips and the action. */
+.step .toggle { margin: 2px 0 14px; font-size: 13.5px; color: var(--text-muted); }
