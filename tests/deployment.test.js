@@ -20,6 +20,21 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const readJson = async (p) => JSON.parse(await readFile(join(root, p), 'utf8'));
 
+async function apiRoutes() {
+  const out = [];
+  const walk = async (dir, prefix) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full, `${prefix}/${entry.name}`);
+      else if (entry.name.endsWith('.js')) {
+        out.push({ route: `${prefix}/${entry.name.replace(/\.js$/, '')}`, file: full });
+      }
+    }
+  };
+  await walk(join(root, 'api'), '/api');
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // vercel.json — the file that decides whether a deploy happens at all
 // ---------------------------------------------------------------------------
@@ -33,6 +48,39 @@ test('vercel.json does not pin a Node runtime in the functions block', async () 
       `functions["${pattern}"].runtime must be unset — Vercel rejects values like "nodejs20.x" ` +
         'there with "Function Runtimes must have a valid version". The Node version comes from ' +
         'engines.node in package.json.',
+    );
+  }
+});
+
+test('no two function patterns match the same file', async () => {
+  const config = await readJson('vercel.json');
+  const patterns = Object.keys(config.functions ?? {});
+
+  // Vercel needs each source file to match exactly one key in `functions`.
+  // Two keys matching the same file is ambiguous and fails the build before
+  // anything is deployed — which is invisible locally, because every test here
+  // reads the file rather than running Vercel's own validation.
+  const toRegExp = (glob) =>
+    new RegExp(
+      '^' +
+        glob
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*\*\//g, '(?:.*/)?')
+          .replace(/\*\*/g, '.*')
+          .replace(/\*/g, '[^/]*') +
+        '$',
+    );
+
+  const files = (await apiRoutes()).map((r) => `api${r.route.slice('/api'.length)}.js`);
+  assert.ok(files.length > 0);
+
+  for (const file of files) {
+    const matched = patterns.filter((p) => toRegExp(p).test(file));
+    assert.equal(
+      matched.length,
+      1,
+      `${file} is matched by ${matched.length} patterns (${matched.join(', ') || 'none'}). ` +
+        'Vercel requires exactly one.',
     );
   }
 });
@@ -377,20 +425,6 @@ test('database TLS certificates are verified unless explicitly waived', async ()
 // API routing — the shape Vercel derives from the filesystem
 // ---------------------------------------------------------------------------
 
-async function apiRoutes() {
-  const out = [];
-  const walk = async (dir, prefix) => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) await walk(full, `${prefix}/${entry.name}`);
-      else if (entry.name.endsWith('.js')) {
-        out.push({ route: `${prefix}/${entry.name.replace(/\.js$/, '')}`, file: full });
-      }
-    }
-  };
-  await walk(join(root, 'api'), '/api');
-  return out;
-}
 
 test('every file in api/ is a usable Vercel function', async () => {
   const routes = await apiRoutes();
@@ -578,11 +612,15 @@ test('setup only accepts POST, so no link or crawler can trigger it', async () =
 
 test('schema.sql ships with the setup function and is safe to re-run', async () => {
   const config = await readJson('vercel.json');
-  assert.equal(
-    config.functions['api/setup.js']?.includeFiles,
-    'backend/db/schema.sql',
-    'setup reads schema.sql by path at runtime; Vercel only traces imports, so it ' +
-      'must be listed under includeFiles or it will be missing from the bundle.',
+  // api/setup.js reads schema.sql by path at runtime, and Vercel's file tracing
+  // only follows imports, so some pattern covering that file must list it.
+  const covering = Object.entries(config.functions ?? {}).filter(([pattern]) =>
+    pattern === 'api/setup.js' || pattern.startsWith('api/**'),
+  );
+  assert.ok(covering.length > 0, 'no functions pattern covers api/setup.js');
+  assert.ok(
+    covering.some(([, settings]) => settings.includeFiles === 'backend/db/schema.sql'),
+    'schema.sql must be listed under includeFiles or it will be absent from the bundle.',
   );
 
   const sql = await readFile(join(root, 'backend/db/schema.sql'), 'utf8');

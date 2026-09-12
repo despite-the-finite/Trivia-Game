@@ -4,9 +4,6 @@
   "outputDirectory": "public",
   "functions": {
     "api/**/*.js": {
-      "maxDuration": 60
-    },
-    "api/setup.js": {
       "maxDuration": 60,
       "includeFiles": "backend/db/schema.sql"
     }
