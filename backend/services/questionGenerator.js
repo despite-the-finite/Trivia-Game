@@ -251,7 +251,7 @@ export async function generateGeography(documents, { count, seenFingerprints, rn
         const id = d.facts?.datasetId;
         if (t.topic.startsWith('peak')) return id === 'wikidata-peaks';
         if (t.topic.startsWith('river')) return id === 'wikidata-rivers';
-        return id === 'rest-countries';
+        return id === 'wikidata-countries';
       }) ?? datasetDoc;
 
     return {

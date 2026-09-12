@@ -31,7 +31,7 @@ Three ideas carry most of the design:
 
 **Facts and question-writing are separate jobs.** Providers fetch real source
 material — wire-service and public-broadcaster feeds for news, research-institution
-feeds for science, REST Countries and Wikidata for geography — and store the
+feeds for science, Wikidata for geography — and store the
 title, URL, publisher and publication date. Only then is that material handed to
 a model, with instructions to write questions from it and nothing else. The model
 is never asked what is true.
@@ -434,7 +434,7 @@ Freshness is per category, because "recent" means different things in each.
 |---|---|---|---|---|
 | Current Events | ~45 min | 36 h | 80 | Reuters, AP, BBC, NPR, Al Jazeera, CBC, Guardian |
 | Science | 6 h | 14 days | 80 | NASA, ESA, Nature, Phys.org, ScienceDaily, NOAA, NIH, CERN |
-| Geography | 30 days | 60 days | 150 | REST Countries, Wikidata |
+| Geography | 30 days | 60 days | 150 | Wikidata |
 
 Every value is overridable by environment variable — see `.env.example`.
 
@@ -657,9 +657,13 @@ stops the timer rather than penalising the player.
 - **Feed reachability.** The default news and science feeds are public RSS. Some
   networks and some hosting environments block them; `NEWS_FEEDS` and
   `SCIENCE_FEEDS` exist so you can point at reachable sources.
-- **Flag questions** are not implemented. REST Countries returns flag images, and
-  the play shape currently carries text options only; adding image answers would
-  mean extending that shape.
+- **Flag questions** are not implemented. The play shape carries text options
+  only; adding image answers would mean extending that shape.
+- **Geography sources.** Country data came from REST Countries until v3.1 was
+  deprecated — it now answers 200 with an error object instead of the country
+  array, and v5 requires an API key. It is Wikidata now: no key, the same source
+  already used for peaks and rivers, and authoritative structured data, which is
+  the property this category actually depends on.
 - **Timezone.** The daily challenge day is UTC. A local-timezone daily would mean
   several concurrent boards and a much murkier "once per day" rule.
 - **Rate limits** are per-IP for account creation, which can bite users behind

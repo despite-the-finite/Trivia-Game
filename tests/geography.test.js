@@ -4,7 +4,7 @@ import { buildGeographyQuestions } from '../backend/services/geographyTemplates.
 import { seededRandom, shuffle, normalizeFriendCode, friendCode } from '../backend/lib/ids.js';
 
 /**
- * A stand-in for what geographyProvider returns from REST Countries and
+ * A stand-in for what geographyProvider returns from
  * Wikidata. The point of these tests is that answers come from the data, not
  * from a model — so every assertion checks the data, not phrasing.
  */

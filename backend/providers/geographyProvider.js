@@ -6,45 +6,95 @@ import { sha256 } from '../lib/ids.js';
  *
  * Geography is the category where we deliberately do NOT let a model decide
  * what is true. Every fact here comes from a structured dataset fetched over
- * the network (REST Countries, Wikidata), and the question templates derive the
+ * the network (Wikidata), and the question templates derive the
  * answer *and* the distractors from that same data. The LLM's only optional
  * role downstream is rephrasing the question text — never determining the
  * answer.
  */
 
 /**
- * REST Countries caps `fields` on the /all endpoint at TEN, and returns 400 for
- * both a missing and an over-long list. Exactly ten are requested here, so this
- * has no headroom: adding one more silently costs the entire countries dataset,
- * and with it every capital, border, currency, language, population and area
- * question. A test asserts the count.
+ * Country reference data comes from Wikidata.
  *
- * What was dropped to fit, and why it is safe:
- *   flags       — unused; answer options are text only.
- *   subregion   — appears in one explanation, which reads fine without it.
- *   independent — `unMember` alone is the sovereignty filter now. UN membership
- *                 is a crisper and less disputed line than the `independent`
- *                 flag, and it is the one that keeps territories out of
- *                 "what is the capital of X?".
+ * It used to come from REST Countries, which is now deprecated: v3.1 answers a
+ * 200 carrying an error object rather than the country array, and v5 requires
+ * an API key. Wikidata needs no key, is already the source for peaks and
+ * rivers, and is authoritative structured data — which is the property this
+ * category depends on, since geography answers and distractors both come
+ * straight from the dataset and are never decided by a model.
+ *
+ * Three queries rather than one. Every OPTIONAL in SPARQL multiplies the
+ * intermediate result, and a single query carrying capital, population, area,
+ * continent, borders, currencies and languages is heavy enough to risk
+ * Wikidata's own query timeout. Splitting also means a failure is partial: the
+ * core query is what a run cannot do without, and the other two each cost one
+ * family of questions if they fail.
  */
-const REST_COUNTRIES_FIELDS = [
-  'name',
-  'cca3',
-  'capital',
-  'population',
-  'area',
-  'region',
-  'borders',
-  'currencies',
-  'languages',
-  'unMember',
-];
 
-export const REST_COUNTRIES_FIELD_LIMIT = 10;
+/** Instances of this are sovereign states. */
+const SOVEREIGN_STATE = 'wd:Q3624078';
 
-const REST_COUNTRIES_URL =
-  process.env.REST_COUNTRIES_URL ||
-  `https://restcountries.com/v3.1/all?fields=${REST_COUNTRIES_FIELDS.join(',')}`;
+/** Shared preamble: current sovereign states, with an English label. */
+const COUNTRY_BASE = `
+  ?c wdt:P31 ${SOVEREIGN_STATE} ;
+     rdfs:label ?cLabel .
+  FILTER(lang(?cLabel) = "en")
+  FILTER NOT EXISTS { ?c wdt:P576 ?dissolved }
+`;
+
+/**
+ * Capital, population, area and continent.
+ *
+ * Area is read through `psn:` — the normalised value — rather than `wdt:`.
+ * Wikidata stores areas against a unit, and truth values hand back the bare
+ * number, so a country recorded in square miles or square metres would be
+ * compared directly against one recorded in square kilometres and produce a
+ * confidently wrong "which is largest" answer. Normalised quantities are always
+ * in the SI unit, square metres, which converts cleanly.
+ */
+const COUNTRY_CORE_QUERY = `
+  SELECT ?c ?cLabel
+         (SAMPLE(?capLabel) AS ?capital)
+         (MAX(?pop)   AS ?population)
+         (MAX(?areaM2) AS ?areaSquareMetres)
+         (SAMPLE(?contLabel) AS ?continent)
+  WHERE {
+    ${COUNTRY_BASE}
+    OPTIONAL { ?c wdt:P36 ?cap . ?cap rdfs:label ?capLabel . FILTER(lang(?capLabel) = "en") }
+    OPTIONAL { ?c wdt:P1082 ?pop }
+    OPTIONAL { ?c p:P2046/psn:P2046/wikibase:quantityAmount ?areaM2 }
+    OPTIONAL { ?c wdt:P30 ?cont . ?cont rdfs:label ?contLabel . FILTER(lang(?contLabel) = "en") }
+  }
+  GROUP BY ?c ?cLabel
+`;
+
+/**
+ * Land borders, as entity ids so they join against the country list by key
+ * rather than by name. Restricted to borders with other sovereign states, which
+ * is what a "which country borders X?" question means.
+ */
+const COUNTRY_BORDER_QUERY = `
+  SELECT ?c (GROUP_CONCAT(DISTINCT ?border; separator="|") AS ?borders)
+  WHERE {
+    ${COUNTRY_BASE}
+    ?c wdt:P47 ?border .
+    ?border wdt:P31 ${SOVEREIGN_STATE} .
+    FILTER NOT EXISTS { ?border wdt:P576 ?borderDissolved }
+  }
+  GROUP BY ?c
+`;
+
+/** Official currency and official language. Both are genuinely multi-valued. */
+const COUNTRY_DETAIL_QUERY = `
+  SELECT ?c
+         (GROUP_CONCAT(DISTINCT ?curLabel;  separator="|") AS ?currencies)
+         (GROUP_CONCAT(DISTINCT ?langLabel; separator="|") AS ?languages)
+  WHERE {
+    ${COUNTRY_BASE}
+    OPTIONAL { ?c wdt:P38 ?cur  . ?cur  rdfs:label ?curLabel  . FILTER(lang(?curLabel)  = "en") }
+    OPTIONAL { ?c wdt:P37 ?lang . ?lang rdfs:label ?langLabel . FILTER(lang(?langLabel) = "en") }
+  }
+  GROUP BY ?c
+`;
 
 const WIKIDATA_SPARQL = process.env.WIKIDATA_SPARQL_URL || 'https://query.wikidata.org/sparql';
 
@@ -54,30 +104,101 @@ async function sparql(query) {
   return body?.results?.bindings ?? [];
 }
 
-/** Countries: capitals, populations, area, region, borders, currencies, languages, flags. */
-async function collectCountries() {
-  const raw = await fetchJson(REST_COUNTRIES_URL, { timeoutMs: 25000 });
-  if (!Array.isArray(raw)) throw new Error('REST Countries returned an unexpected payload');
+/** "http://www.wikidata.org/entity/Q30" -> "Q30". Used as each country's key. */
+const entityId = (uri) => (typeof uri === 'string' ? uri.split('/').pop() : null);
 
-  return raw
-    .filter((c) => c?.name?.common && c.unMember)
-    .map((c) => ({
+const splitList = (value) =>
+  typeof value === 'string' && value.length
+    ? [...new Set(value.split('|').map((v) => v.trim()).filter(Boolean))]
+    : [];
+
+const numberOrNull = (value) => {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Countries: capitals, populations, area, continent, borders, currencies,
+ * languages — merged from the three queries above.
+ *
+ * Only the core query is allowed to fail the run. Borders, currencies and
+ * languages each back one family of questions, so losing them costs variety
+ * but still leaves a usable, correct batch.
+ */
+async function collectCountries() {
+  const core = await sparql(COUNTRY_CORE_QUERY);
+  if (!core.length) {
+    throw new Error('Wikidata returned no sovereign states for the country query');
+  }
+
+  const countries = new Map();
+  for (const row of core) {
+    const code = entityId(row.c?.value);
+    const name = row.cLabel?.value;
+    if (!code || !name) continue;
+    // Wikidata labels fall back to the entity id when no English label exists;
+    // "Q1234" is not a country name a player should ever be shown.
+    if (/^Q\d+$/.test(name)) continue;
+
+    const areaM2 = numberOrNull(row.areaSquareMetres?.value);
+    countries.set(code, {
       kind: 'country',
-      name: c.name.common,
-      officialName: c.name.official ?? c.name.common,
-      code: c.cca3,
-      capital: Array.isArray(c.capital) && c.capital.length === 1 ? c.capital[0] : null,
-      population: Number.isFinite(c.population) ? c.population : null,
-      area: Number.isFinite(c.area) ? c.area : null,
-      region: c.region ?? null,
+      name,
+      officialName: name,
+      code,
+      capital: row.capital?.value || null,
+      population: numberOrNull(row.population?.value),
+      // Normalised quantities are square metres; the templates talk in km².
+      area: areaM2 === null ? null : areaM2 / 1_000_000,
+      region: row.continent?.value || null,
       subregion: null,
-      borders: Array.isArray(c.borders) ? c.borders : [],
-      currencies: c.currencies
-        ? Object.entries(c.currencies).map(([code, v]) => ({ code, name: v?.name ?? code }))
-        : [],
-      languages: c.languages ? Object.values(c.languages) : [],
-    }))
-    .filter((c) => c.name && c.region);
+      borders: [],
+      currencies: [],
+      languages: [],
+    });
+  }
+
+  // Borders and details are enrichment: a failure here narrows the question mix
+  // rather than ending the run, so it is logged and swallowed deliberately.
+  await Promise.all([
+    (async () => {
+      try {
+        for (const row of await sparql(COUNTRY_BORDER_QUERY)) {
+          const country = countries.get(entityId(row.c?.value));
+          if (!country) continue;
+          country.borders = splitList(row.borders?.value)
+            .map(entityId)
+            .filter((code) => code && countries.has(code));
+        }
+      } catch (err) {
+        console.warn(`[geographyProvider] border data unavailable: ${err.message}`);
+      }
+    })(),
+    (async () => {
+      try {
+        for (const row of await sparql(COUNTRY_DETAIL_QUERY)) {
+          const country = countries.get(entityId(row.c?.value));
+          if (!country) continue;
+          country.currencies = splitList(row.currencies?.value)
+            .filter((n) => !/^Q\d+$/.test(n))
+            .map((name) => ({ code: name, name }));
+          country.languages = splitList(row.languages?.value).filter((n) => !/^Q\d+$/.test(n));
+        }
+      } catch (err) {
+        console.warn(`[geographyProvider] currency and language data unavailable: ${err.message}`);
+      }
+    })(),
+  ]);
+
+  // A country with no continent cannot supply same-region distractors, which is
+  // what keeps a capital-city question from offering four random continents.
+  const usable = [...countries.values()].filter((c) => c.name && c.region);
+  if (!usable.length) {
+    throw new Error(
+      `Wikidata returned ${countries.size} countries but none carried a continent`,
+    );
+  }
+  return usable;
 }
 
 async function collectPeaks() {
@@ -138,10 +259,10 @@ async function collectRivers() {
 
 export const DATASETS = [
   {
-    id: 'rest-countries',
-    sourceName: 'REST Countries',
-    url: 'https://restcountries.com/',
-    title: 'Country reference data (capitals, populations, borders, currencies, languages)',
+    id: 'wikidata-countries',
+    sourceName: 'Wikidata',
+    url: 'https://query.wikidata.org/',
+    title: 'Country reference data (capitals, populations, areas, borders, currencies, languages)',
     load: collectCountries,
     // Countries carry eight of the eleven question shapes. Without them a
     // batch collapses into "which mountain is highest" and "which river is
