@@ -1,4 +1,4 @@
--- Live Trivia schema.
+-- Entropic Brainwaves schema.
 --
 -- Design notes:
 --  * Question content (`questions`) is fully separated from gameplay
@@ -45,14 +45,26 @@ CREATE TABLE IF NOT EXISTS player_stats (
   current_events_score BIGINT  NOT NULL DEFAULT 0,
   science_score        BIGINT  NOT NULL DEFAULT 0,
   geography_score      BIGINT  NOT NULL DEFAULT 0,
-  easy_correct         INTEGER NOT NULL DEFAULT 0,
-  medium_correct       INTEGER NOT NULL DEFAULT 0,
-  hard_correct         INTEGER NOT NULL DEFAULT 0,
+  general_knowledge_score BIGINT NOT NULL DEFAULT 0,
   best_game_score      INTEGER NOT NULL DEFAULT 0,
   best_game_accuracy   NUMERIC(5,2) NOT NULL DEFAULT 0,
   best_daily_score     INTEGER NOT NULL DEFAULT 0,
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'player_stats' AND column_name = 'general_knowledge_score'
+  ) THEN
+    ALTER TABLE player_stats ADD COLUMN general_knowledge_score BIGINT NOT NULL DEFAULT 0;
+  END IF;
+END $$;
+
+ALTER TABLE player_stats DROP COLUMN IF EXISTS easy_correct;
+ALTER TABLE player_stats DROP COLUMN IF EXISTS medium_correct;
+ALTER TABLE player_stats DROP COLUMN IF EXISTS hard_correct;
 
 CREATE TABLE IF NOT EXISTS friendships (
   player_id  UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -68,8 +80,8 @@ CREATE TABLE IF NOT EXISTS friendships (
 
 CREATE TABLE IF NOT EXISTS source_documents (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider      TEXT        NOT NULL,          -- newsProvider | scienceProvider | geographyProvider
-  category      TEXT        NOT NULL,          -- current-events | science | geography
+  provider      TEXT        NOT NULL,          -- newsProvider | scienceProvider | geographyProvider | generalKnowledgeProvider
+  category      TEXT        NOT NULL,          -- current-events | science | geography | general-knowledge
   title         TEXT        NOT NULL,
   url           TEXT        NOT NULL,
   source_name   TEXT        NOT NULL,
@@ -84,8 +96,7 @@ CREATE INDEX IF NOT EXISTS source_documents_category_idx
 
 CREATE TABLE IF NOT EXISTS questions (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  category            TEXT        NOT NULL,   -- current-events | science | geography
-  difficulty          TEXT        NOT NULL,   -- easy | medium | hard
+  category            TEXT        NOT NULL,   -- current-events | science | geography | general-knowledge
   question            TEXT        NOT NULL,
   answers             JSONB       NOT NULL,   -- canonical order; index 0 is NOT necessarily correct
   correct_index       INTEGER     NOT NULL,
@@ -106,8 +117,11 @@ CREATE TABLE IF NOT EXISTS questions (
   CHECK (jsonb_array_length(answers) BETWEEN 2 AND 6)
 );
 
+ALTER TABLE questions DROP COLUMN IF EXISTS difficulty;
+
+DROP INDEX IF EXISTS questions_pool_idx;
 CREATE INDEX IF NOT EXISTS questions_pool_idx
-  ON questions (category, difficulty, expires_at DESC)
+  ON questions (category, expires_at DESC)
   WHERE active;
 
 CREATE INDEX IF NOT EXISTS questions_expiry_idx ON questions (expires_at) WHERE active;
@@ -145,13 +159,13 @@ CREATE INDEX IF NOT EXISTS refresh_runs_category_idx
 CREATE TABLE IF NOT EXISTS game_sessions (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   player_id      UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  mode           TEXT        NOT NULL,        -- quick | daily | challenge
+  mode           TEXT        NOT NULL,        -- daily | challenge
   category       TEXT        NOT NULL,        -- includes 'mixed'
-  difficulty     TEXT,                        -- null == mixed difficulty
   question_ids   UUID[]      NOT NULL,
   answer_orders  JSONB       NOT NULL,        -- { [questionId]: [canonicalIndex, ...] }
   challenge_id   UUID,  -- FK added after `challenges` exists, see bottom of file
   daily_date     DATE,
+  is_practice    BOOLEAN     NOT NULL DEFAULT FALSE, -- replay of a day's quiz after the scoring attempt
   total_score    INTEGER     NOT NULL DEFAULT 0,
   correct_count  INTEGER     NOT NULL DEFAULT 0,
   best_streak    INTEGER     NOT NULL DEFAULT 0,
@@ -159,6 +173,18 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   completed_at   TIMESTAMPTZ,
   expires_at     TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE game_sessions DROP COLUMN IF EXISTS difficulty;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'game_sessions' AND column_name = 'is_practice'
+  ) THEN
+    ALTER TABLE game_sessions ADD COLUMN is_practice BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS game_sessions_player_idx
   ON game_sessions (player_id, started_at DESC);
@@ -185,12 +211,13 @@ CREATE TABLE IF NOT EXISTS score_events (
   player_id   UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   session_id  UUID        REFERENCES game_sessions(id) ON DELETE CASCADE,
   category    TEXT        NOT NULL,
-  difficulty  TEXT        NOT NULL,
   points      INTEGER     NOT NULL,
   correct     BOOLEAN     NOT NULL,
   response_ms INTEGER     NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE score_events DROP COLUMN IF EXISTS difficulty;
 
 CREATE INDEX IF NOT EXISTS score_events_leaderboard_idx
   ON score_events (created_at DESC, player_id);
@@ -206,12 +233,13 @@ CREATE TABLE IF NOT EXISTS challenges (
   slug          TEXT        NOT NULL UNIQUE,  -- short id used in the share URL
   challenger_id UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   category      TEXT        NOT NULL,
-  difficulty    TEXT,
   question_ids  UUID[]      NOT NULL,
   answer_orders JSONB       NOT NULL,         -- fixed for every participant
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at    TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE challenges DROP COLUMN IF EXISTS difficulty;
 
 CREATE TABLE IF NOT EXISTS challenge_participants (
   challenge_id UUID        NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
@@ -226,12 +254,42 @@ CREATE TABLE IF NOT EXISTS challenge_participants (
   PRIMARY KEY (challenge_id, player_id)
 );
 
+-- One fixed, shared question set per (UTC day, category) — 'mixed' is the
+-- original global Daily Challenge; every other category is that category's
+-- own daily quiz (see dailyChallengeService).
 CREATE TABLE IF NOT EXISTS daily_challenges (
-  day           DATE PRIMARY KEY,
+  day           DATE        NOT NULL,
+  category      TEXT        NOT NULL DEFAULT 'mixed',
   question_ids  UUID[]      NOT NULL,
   answer_orders JSONB       NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'daily_challenges' AND column_name = 'category'
+  ) THEN
+    ALTER TABLE daily_challenges ADD COLUMN category TEXT NOT NULL DEFAULT 'mixed';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'daily_challenges_pkey'
+       AND conrelid = 'daily_challenges'::regclass
+       AND array_length(conkey, 1) = 1
+  ) THEN
+    ALTER TABLE daily_challenges DROP CONSTRAINT daily_challenges_pkey;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'daily_challenges_pkey' AND conrelid = 'daily_challenges'::regclass
+  ) THEN
+    ALTER TABLE daily_challenges ADD CONSTRAINT daily_challenges_pkey PRIMARY KEY (day, category);
+  END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Basic abuse control
@@ -259,7 +317,7 @@ BEGIN
   END IF;
 END $$;
 
--- A player may only have one scored attempt at a given daily challenge.
-CREATE UNIQUE INDEX IF NOT EXISTS game_sessions_daily_once_idx
-  ON game_sessions (player_id, daily_date)
-  WHERE mode = 'daily';
+-- Multiple attempts per (player, day, category) are allowed — replays after the
+-- first completed one are marked is_practice and excluded from scoring, rather
+-- than being blocked outright. See dailyChallengeService/sessionService.
+DROP INDEX IF EXISTS game_sessions_daily_once_idx;

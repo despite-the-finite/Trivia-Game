@@ -53,6 +53,7 @@ export const CATEGORY_LABELS = {
   'current-events': 'Current Events',
   science: 'Science',
   geography: 'Geography',
+  'general-knowledge': 'General Knowledge',
   mixed: 'Mixed',
 };
 

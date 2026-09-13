@@ -1,5 +1,5 @@
 {
-  "name": "live-trivia",
+  "name": "entropic-brainwaves",
   "version": "1.0.0",
   "private": true,
   "description": "An online-only trivia platform: trivia is generated server-side from live internet sources, cached, and served through a serverless API.",

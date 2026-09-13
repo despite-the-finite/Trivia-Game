@@ -13,7 +13,7 @@ import {
  *
  *   period : today | week | month | all      (default: week)
  *   scope  : global | friends                (default: friends)
- *   board  : overall | current-events | science | geography | accuracy | streak
+ *   board  : overall | current-events | science | geography | general-knowledge | accuracy | streak
  *
  * The defaults match the product's default view — Friends, This Week, Overall.
  * `scope=friends` needs a player token; `scope=global` is open.

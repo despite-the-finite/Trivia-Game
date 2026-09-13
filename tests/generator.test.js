@@ -49,7 +49,6 @@ test('provenance is taken from our document record, not the model', async () => 
     generate: stubModel([
       {
         sourceId: 1,
-        difficulty: 'medium',
         question: 'How much did the harbour bridge refit cost?',
         answers: ['412 million euros', '180 million euros', '95 million euros', '600 million euros'],
         correctAnswer: '412 million euros',
@@ -77,7 +76,6 @@ test('a question citing an unknown document id is dropped', async () => {
     generate: stubModel([
       {
         sourceId: 99,
-        difficulty: 'easy',
         question: 'Which city hosted the ceremony described in a source we never supplied?',
         answers: ['Oslo', 'Lima', 'Cairo', 'Perth'],
         correctAnswer: 'Oslo',
@@ -97,7 +95,6 @@ test('low-quality generations are rejected, good ones in the same batch survive'
     generate: stubModel([
       {
         sourceId: 1,
-        difficulty: 'medium',
         question: 'How much did the harbour bridge refit cost?',
         answers: ['412 million euros', '180 million euros', '95 million euros', '600 million euros'],
         correctAnswer: '412 million euros',
@@ -106,7 +103,6 @@ test('low-quality generations are rejected, good ones in the same batch survive'
       {
         // Speculative — not a settled fact.
         sourceId: 2,
-        difficulty: 'medium',
         question: 'How many stations might the rail extension eventually add?',
         answers: ['Four', 'Six', 'Eight', 'Ten'],
         correctAnswer: 'Four',
@@ -115,7 +111,6 @@ test('low-quality generations are rejected, good ones in the same batch survive'
       {
         // Self-referential — the player cannot see the article.
         sourceId: 2,
-        difficulty: 'easy',
         question: 'According to the article, how long is the new track?',
         answers: ['84 km', '12 km', '150 km', '210 km'],
         correctAnswer: '84 km',
@@ -124,7 +119,6 @@ test('low-quality generations are rejected, good ones in the same batch survive'
       {
         // Only three options.
         sourceId: 1,
-        difficulty: 'hard',
         question: 'In which month did the harbour bridge reopen?',
         answers: ['August', 'March', 'November'],
         correctAnswer: 'August',
@@ -133,7 +127,6 @@ test('low-quality generations are rejected, good ones in the same batch survive'
       {
         // Duplicate of the first accepted question.
         sourceId: 1,
-        difficulty: 'hard',
         question: 'How much did the harbour bridge refit cost?',
         answers: ['412 million euros', '1 billion euros', '20 million euros', '75 million euros'],
         correctAnswer: '412 million euros',
@@ -160,7 +153,6 @@ test('questions already in the bank are not regenerated', async () => {
     generate: stubModel([
       {
         sourceId: 2,
-        difficulty: 'medium',
         question: 'How many kilometres of track did the rail extension add?',
         answers: ['84', '12', '150', '210'],
         correctAnswer: '84',
@@ -177,7 +169,6 @@ test('questions already in the bank are not regenerated', async () => {
     generate: stubModel([
       {
         sourceId: 2,
-        difficulty: 'medium',
         question: 'How many kilometres of track did the rail extension add?',
         answers: ['84', '12', '150', '210'],
         correctAnswer: '84',
@@ -229,7 +220,7 @@ test('the prompt hands the model the supplied facts and nothing else', async () 
   assert.equal(seenSchema.type, 'object');
   assert.equal(seenSchema.additionalProperties, false);
   const item = seenSchema.properties.questions.items;
-  assert.deepEqual(item.properties.difficulty.enum, ['easy', 'medium', 'hard']);
+  assert.equal(item.properties.difficulty, undefined, 'difficulty is no longer part of the schema');
   assert.ok(item.required.includes('correctAnswer'));
   assert.ok(item.required.includes('sourceId'));
 });

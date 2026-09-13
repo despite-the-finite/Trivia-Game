@@ -44,10 +44,7 @@ async function main() {
   console.log('\nQuestion bank:');
   for (const cat of CATEGORIES) {
     const status = await poolStatus(cat);
-    console.log(
-      `  ${cat.padEnd(16)} ${String(status.total).padStart(4)} live ` +
-        `(easy ${status.byDifficulty.easy}, medium ${status.byDifficulty.medium}, hard ${status.byDifficulty.hard})`,
-    );
+    console.log(`  ${cat.padEnd(18)} ${String(status.total).padStart(4)} live`);
   }
 }
 

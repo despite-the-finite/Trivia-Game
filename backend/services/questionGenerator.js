@@ -26,12 +26,7 @@ Absolute rules:
 7. Avoid anything opinion-based, speculative, rumoured, predictive, or a politically contested interpretation. Prefer who/what/where/how-many facts that were reported as settled.
 8. Never use "all of the above", "none of the above", or similar meta-options.
 9. Set sourceId to the id of the single document the question came from.
-10. The explanation is one or two sentences stating the fact plainly, without referring to the source document as a document.
-
-Difficulty guidance:
-- easy: the central fact of a widely covered story.
-- medium: a specific named detail (a number, a place, a title, a role).
-- hard: a precise secondary detail that a careful reader would retain.`;
+10. The explanation is one or two sentences stating the fact plainly, without referring to the source document as a document.`;
 
 const QUESTION_SCHEMA = {
   type: 'object',
@@ -43,10 +38,9 @@ const QUESTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['sourceId', 'difficulty', 'question', 'answers', 'correctAnswer', 'explanation'],
+        required: ['sourceId', 'question', 'answers', 'correctAnswer', 'explanation'],
         properties: {
           sourceId: { type: 'integer' },
-          difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
           question: { type: 'string' },
           answers: { type: 'array', items: { type: 'string' } },
           correctAnswer: { type: 'string' },
@@ -98,7 +92,7 @@ export async function generateFromDocuments(
   const label = CATEGORY_LABELS[category] ?? category;
   const prompt = [
     `Category: ${label}`,
-    `Write up to ${count} questions total, at most 2 per source document, spread across easy, medium and hard.`,
+    `Write up to ${count} questions total, at most 2 per source document.`,
     '',
     renderDocuments(documents),
     '',
@@ -256,7 +250,6 @@ export async function generateGeography(documents, { count, seenFingerprints, rn
 
     return {
       category: 'geography',
-      difficulty: t.difficulty,
       question: t.question,
       answers: [t.correctAnswer, ...t.distractors],
       correctAnswer: t.correctAnswer,

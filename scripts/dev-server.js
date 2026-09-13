@@ -123,7 +123,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`\n  Live Trivia dev server → http://localhost:${port}\n`);
+  console.log(`\n  Entropic Brainwaves dev server → http://localhost:${port}\n`);
   if (!process.env.DATABASE_URL) {
     console.warn('  ⚠  DATABASE_URL is not set — API calls will fail until it is.');
   }

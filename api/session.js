@@ -1,18 +1,9 @@
-import {
-  createHandler,
-  getQuery,
-  readJsonBody,
-  badRequest,
-  withStatus,
-} from '../backend/lib/http.js';
+import { createHandler, getQuery, readJsonBody, badRequest } from '../backend/lib/http.js';
 import { requirePlayer } from '../backend/lib/auth.js';
 import { queryRows } from '../backend/db/index.js';
-import { enforceRateLimit } from '../backend/lib/rateLimit.js';
 import { isUuid } from '../backend/lib/ids.js';
-import { LIMITS } from '../backend/lib/config.js';
 import { getQuestionsByIds } from '../backend/services/questionService.js';
 import {
-  createSession,
   getSession,
   finishSession,
   getSessionReview,
@@ -22,43 +13,25 @@ import {
 /**
  * /api/session
  *
- *   POST /api/session                    start a quick-play run
- *   POST /api/session?action=finish      finalise and get the results summary
+ *   POST /api/session                    finalise and get the results summary
  *   GET  /api/session?id=<uuid>          resume an in-progress run
  *   GET  /api/session?id=<uuid>&view=review   per-question review (after finishing)
  *
- * A run is created with its full question list and answer ordering fixed, and
- * the browser receives every question up front — so moving between questions is
- * instant and there is no mid-game network stall.
+ * Sessions are created elsewhere — by a category's daily quiz
+ * (dailyChallengeService) or by a challenge (challengeService) — and always
+ * arrive with their full question list and answer ordering fixed, so moving
+ * between questions is instant and there is no mid-game network stall. This
+ * endpoint only finishes, resumes and reviews them.
  */
 export default createHandler({
   async POST(req) {
     const player = await requirePlayer(req);
     const q = getQuery(req);
     const body = await readJsonBody(req);
-    // A body carrying a sessionId can only mean "finish this run" — inferring it
-    // avoids the trap where a missing `action` silently starts a whole new game.
-    const inferred = body.sessionId ? 'finish' : 'start';
-    const action = (q.action ?? body.action ?? inferred).toLowerCase();
 
-    if (action === 'finish') {
-      const sessionId = body.sessionId ?? q.id;
-      if (!isUuid(sessionId)) throw badRequest('sessionId is required.');
-      return finishSession(player, sessionId);
-    }
-
-    if (action !== 'start') {
-      throw badRequest('Unknown action. Expected start or finish.');
-    }
-
-    await enforceRateLimit(`session:start:${player.id}`, { limit: LIMITS.sessionsPerHour, windowMs: 60 * 60 * 1000 });
-
-    const playable = await createSession(player, {
-      category: body.category,
-      difficulty: body.difficulty,
-      count: body.count,
-    });
-    return withStatus(201, playable);
+    const sessionId = body.sessionId ?? q.id;
+    if (!isUuid(sessionId)) throw badRequest('sessionId is required.');
+    return finishSession(player, sessionId);
   },
 
   async GET(req) {

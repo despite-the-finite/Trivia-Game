@@ -1,6 +1,6 @@
 import { createHandler, getQuery, badRequest } from '../backend/lib/http.js';
 import { isAdminRequest } from '../backend/lib/auth.js';
-import { PLAYABLE_CATEGORIES, DIFFICULTIES } from '../backend/lib/config.js';
+import { PLAYABLE_CATEGORIES } from '../backend/lib/config.js';
 import {
   pickBalancedSet,
   buildAnswerOrders,
@@ -10,11 +10,14 @@ import {
 import { poolStatus, needsRefresh, refreshInBackground } from '../backend/services/contentPipeline.js';
 
 /**
- * GET /api/trivia?category=&difficulty=&count=
+ * GET /api/trivia?category=&count=
  *
- * Reads from the cached, validated question bank. This never calls an upstream
- * API or the LLM inline — the content pipeline fills the bank on a schedule and
- * this endpoint just serves from it.
+ * Read-only preview of the cached, validated question bank — not used by the
+ * frontend (which always plays through a category's fixed daily quiz, see
+ * dailyChallengeService). Useful for admins/tests to inspect what the pipeline
+ * has generated. This never calls an upstream API or the LLM inline — the
+ * content pipeline fills the bank on a schedule and this endpoint just serves
+ * from it.
  *
  * Two response shapes:
  *   * Default (browser): the play shape — no correct answer. Exposing the
@@ -34,17 +37,9 @@ export default createHandler({
       throw badRequest(`category must be one of: ${PLAYABLE_CATEGORIES.join(', ')}.`);
     }
 
-    let difficulty = null;
-    if (q.difficulty && q.difficulty !== 'any') {
-      difficulty = String(q.difficulty).toLowerCase();
-      if (!DIFFICULTIES.includes(difficulty)) {
-        throw badRequest(`difficulty must be one of: ${DIFFICULTIES.join(', ')}.`);
-      }
-    }
-
     const count = Math.min(Math.max(Number.parseInt(q.count ?? '10', 10) || 10, 1), 50);
 
-    const questions = await pickBalancedSet({ category, difficulty, count });
+    const questions = await pickBalancedSet({ category, count });
     const orders = buildAnswerOrders(questions);
 
     const includeAnswers = isAdminRequest(req);
@@ -59,7 +54,6 @@ export default createHandler({
 
     return {
       category,
-      difficulty: difficulty ?? 'any',
       count: questions.length,
       requested: count,
       answersIncluded: includeAnswers,

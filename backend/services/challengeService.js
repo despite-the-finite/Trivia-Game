@@ -5,7 +5,6 @@ import { challengeSlug, seededRandom } from '../lib/ids.js';
 import { pickBalancedSet, buildAnswerOrders, getQuestionsByIds } from './questionService.js';
 import {
   normalizeCategory,
-  normalizeDifficulty,
   normalizeCount,
   createFixedSession,
   shapeSessionForPlay,
@@ -24,12 +23,11 @@ function challengeUrl(slug) {
   return `${base}/challenge/${slug}`;
 }
 
-export async function createChallenge(player, { category, difficulty, count } = {}) {
+export async function createChallenge(player, { category, count } = {}) {
   const cat = normalizeCategory(category);
-  const diff = normalizeDifficulty(difficulty);
   const n = normalizeCount(count, GAME.challengeQuestionCount);
 
-  const questions = await pickBalancedSet({ category: cat, difficulty: diff, count: n });
+  const questions = await pickBalancedSet({ category: cat, count: n });
   if (questions.length < Math.min(n, 5)) {
     throw conflict('Not enough fresh questions are available to build a challenge right now.');
   }
@@ -39,14 +37,13 @@ export async function createChallenge(player, { category, difficulty, count } = 
   const answerOrders = buildAnswerOrders(questions, seededRandom(`challenge:${slug}`));
 
   const challenge = await queryOne(
-    `INSERT INTO challenges (slug, challenger_id, category, difficulty, question_ids, answer_orders, expires_at)
-          VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW() + ($7 || ' milliseconds')::interval)
+    `INSERT INTO challenges (slug, challenger_id, category, question_ids, answer_orders, expires_at)
+          VALUES ($1, $2, $3, $4, $5::jsonb, NOW() + ($6 || ' milliseconds')::interval)
        RETURNING *`,
     [
       slug,
       player.id,
       cat,
-      diff,
       questions.map((q) => q.id),
       JSON.stringify(answerOrders),
       String(GAME.challengeTtlMs),
@@ -109,7 +106,6 @@ export async function joinChallenge(player, slug) {
     questionIds: challenge.question_ids,
     answerOrders: challenge.answer_orders,
     category: challenge.category,
-    difficulty: challenge.difficulty,
     challengeId: challenge.id,
   });
 
@@ -129,7 +125,6 @@ function shapeChallengeMeta(challenge) {
     id: challenge.id,
     slug: challenge.slug,
     category: challenge.category,
-    difficulty: challenge.difficulty,
     questionCount: challenge.question_ids.length,
     createdAt: challenge.created_at,
     expiresAt: challenge.expires_at,

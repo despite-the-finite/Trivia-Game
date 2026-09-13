@@ -8,31 +8,28 @@ import {
 } from '../backend/services/scoringService.js';
 import { SCORING } from '../backend/lib/config.js';
 
-test('base points follow the published difficulty table', () => {
+test('base points follow the flat scoring table', () => {
   const slow = SCORING.questionTimeLimitMs;
-  for (const [difficulty, base] of Object.entries(SCORING.base)) {
-    const result = scoreAnswer({ correct: true, difficulty, responseMs: slow, currentStreak: 0 });
-    assert.equal(result.basePoints, base);
-    assert.equal(result.speedBonus, 0, 'no speed bonus at the time limit');
-    assert.equal(result.points, base);
-  }
+  const result = scoreAnswer({ correct: true, responseMs: slow, currentStreak: 0 });
+  assert.equal(result.basePoints, SCORING.base);
+  assert.equal(result.speedBonus, 0, 'no speed bonus at the time limit');
+  assert.equal(result.points, SCORING.base);
 });
 
 test('an instant correct answer earns the full speed bonus', () => {
   const result = scoreAnswer({
     correct: true,
-    difficulty: 'hard',
     responseMs: SCORING.fullBonusMs,
     currentStreak: 0,
   });
-  assert.equal(result.speedBonus, SCORING.maxSpeedBonus.hard);
-  assert.equal(result.points, SCORING.base.hard + SCORING.maxSpeedBonus.hard);
+  assert.equal(result.speedBonus, SCORING.maxSpeedBonus);
+  assert.equal(result.points, SCORING.base + SCORING.maxSpeedBonus);
 });
 
 test('the speed bonus decays monotonically with response time', () => {
   let previous = Infinity;
   for (let ms = SCORING.fullBonusMs; ms <= SCORING.questionTimeLimitMs; ms += 1000) {
-    const bonus = speedBonus({ difficulty: 'medium', responseMs: ms, suspicious: false });
+    const bonus = speedBonus({ responseMs: ms, suspicious: false });
     assert.ok(bonus <= previous, `bonus should not increase at ${ms}ms`);
     previous = bonus;
   }
@@ -51,7 +48,6 @@ test('streak tiers match the published thresholds', () => {
 test('a wrong answer scores zero and resets the streak', () => {
   const result = scoreAnswer({
     correct: false,
-    difficulty: 'hard',
     responseMs: 500,
     currentStreak: 9,
   });
@@ -64,13 +60,11 @@ test('rapid guessing is never advantageous', () => {
   // never beat a considered answer given at a human-plausible speed.
   const mashed = scoreAnswer({
     correct: true,
-    difficulty: 'medium',
     responseMs: 120,
     currentStreak: 0,
   });
   const considered = scoreAnswer({
     correct: true,
-    difficulty: 'medium',
     responseMs: SCORING.minPlausibleMs + 50,
     currentStreak: 0,
   });
@@ -84,11 +78,10 @@ test('rapid guessing is never advantageous', () => {
 });
 
 test('expected value of a blind guess is far below answering correctly', () => {
-  const base = SCORING.base.medium;
+  const base = SCORING.base;
   const guessEv = 0.25 * base; // 4 options, no speed bonus, streak reset on the other 75%
   const answered = scoreAnswer({
     correct: true,
-    difficulty: 'medium',
     responseMs: 6000,
     currentStreak: 0,
   }).points;
@@ -127,15 +120,14 @@ test('response time is capped at the question time limit', () => {
   assert.equal(responseMs, SCORING.questionTimeLimitMs);
 });
 
-test('worked example: fast hard answer on a 5-streak', () => {
-  // 200 base + 100 speed = 300, × 1.2 streak = 360
+test('worked example: fast answer on a 5-streak', () => {
+  // 150 base + 75 speed = 225, x 1.2 streak = 270
   const result = scoreAnswer({
     correct: true,
-    difficulty: 'hard',
     responseMs: 1500,
     currentStreak: 4,
   });
   assert.equal(result.newStreak, 5);
   assert.equal(result.streakMultiplier, 1.2);
-  assert.equal(result.points, 360);
+  assert.equal(result.points, Math.round((SCORING.base + SCORING.maxSpeedBonus) * 1.2));
 });

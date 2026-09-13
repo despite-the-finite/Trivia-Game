@@ -11,7 +11,15 @@ import { badRequest } from '../lib/http.js';
 
 export const PERIODS = ['today', 'week', 'month', 'all'];
 export const SCOPES = ['global', 'friends'];
-export const BOARDS = ['overall', 'current-events', 'science', 'geography', 'accuracy', 'streak'];
+export const BOARDS = [
+  'overall',
+  'current-events',
+  'science',
+  'geography',
+  'general-knowledge',
+  'accuracy',
+  'streak',
+];
 
 const PERIOD_SQL = {
   today: "e.created_at >= date_trunc('day', NOW())",
@@ -130,17 +138,17 @@ export async function getLeaderboard({ period, scope, board, limit, viewerId }) 
   };
 }
 
-/** Leaderboard for one day's Daily Challenge: score, accuracy, completion time. */
-export async function getDailyLeaderboard({ day, scope = 'global', viewerId, limit = 50 }) {
+/** Leaderboard for one day's quiz (any category): score, accuracy, completion time. */
+export async function getDailyLeaderboard({ day, category = 'mixed', scope = 'global', viewerId, limit = 50 }) {
   const audience =
     scope === 'friends'
       ? `WITH audience AS (
-           SELECT friend_id AS id FROM friendships WHERE player_id = $2
-           UNION SELECT $2::uuid
+           SELECT friend_id AS id FROM friendships WHERE player_id = $3
+           UNION SELECT $3::uuid
          )`
       : 'WITH audience AS (SELECT id FROM players)';
 
-  const params = scope === 'friends' ? [day, viewerId] : [day];
+  const params = scope === 'friends' ? [day, category, viewerId] : [day, category];
 
   const rows = await queryRows(
     `${audience}
@@ -152,7 +160,8 @@ export async function getDailyLeaderboard({ day, scope = 'global', viewerId, lim
        FROM game_sessions s
        JOIN players p  ON p.id = s.player_id
        JOIN audience a ON a.id = p.id
-      WHERE s.mode = 'daily' AND s.daily_date = $1 AND s.completed_at IS NOT NULL
+      WHERE s.mode = 'daily' AND s.daily_date = $1 AND s.category = $2
+        AND s.is_practice = FALSE AND s.completed_at IS NOT NULL
       ORDER BY s.total_score DESC, answer_ms ASC
       LIMIT ${Math.min(Math.max(Number(limit) || 50, 1), 100)}`,
     params,

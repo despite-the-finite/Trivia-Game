@@ -19,6 +19,10 @@ import { once } from 'node:events';
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 
+function startQuiz(category, token) {
+  return call(`/api/daily-challenge?category=${category}`, { method: 'POST', token });
+}
+
 // The suite creates many accounts from one address; raise the per-IP ceiling
 // so the abuse limiter does not fire on the test itself.
 process.env.PLAYER_CREATE_LIMIT_PER_HOUR = '500';
@@ -102,7 +106,6 @@ async function seedQuestions() {
   const { accepted } = validateBatch(
     built.map((t) => ({
       category: 'geography',
-      difficulty: t.difficulty,
       question: t.question,
       answers: [t.correctAnswer, ...t.distractors],
       correctAnswer: t.correctAnswer,
@@ -119,12 +122,12 @@ async function seedQuestions() {
   for (const q of accepted) {
     await db.query(
       `INSERT INTO questions
-         (category, difficulty, question, answers, correct_index, explanation,
+         (category, question, answers, correct_index, explanation,
           source, source_url, generator, expires_at, fingerprint)
-       VALUES ('geography',$1,$2,$3::jsonb,$4,$5,'Fixture dataset','https://example.test/dataset',
-               'template', NOW() + INTERVAL '7 days', $6)
+       VALUES ('geography',$1,$2::jsonb,$3,$4,'Fixture dataset','https://example.test/dataset',
+               'template', NOW() + INTERVAL '7 days', $5)
        ON CONFLICT (fingerprint) DO NOTHING`,
-      [q.difficulty, q.question, JSON.stringify(q.answers), q.correctIndex, q.explanation, q.fingerprint],
+      [q.question, JSON.stringify(q.answers), q.correctIndex, q.explanation, q.fingerprint],
     );
   }
   return accepted.length;
@@ -161,14 +164,10 @@ describe('a full game: sign up, play, score, finish', async () => {
   const token = created.body.token;
   assert.match(created.body.player.friendCode, /^[A-Z0-9]+-[A-Z0-9]{4}$/);
 
-  const started = await call('/api/session', {
-    method: 'POST',
-    token,
-    body: { category: 'geography', count: 5 },
-  });
+  const started = await startQuiz('geography', token);
   assert.equal(started.status, 201);
   const { session, questions } = started.body;
-  assert.equal(questions.length, 5);
+  assert.ok(questions.length > 0);
 
   // The play shape must never carry the answer key.
   for (const q of questions) {
@@ -210,19 +209,23 @@ describe('a full game: sign up, play, score, finish', async () => {
   assert.equal(finished.status, 200);
   assert.equal(finished.body.result.score, score, 'server total must match the sum it awarded');
   assert.equal(finished.body.result.correct, correctCount);
-  assert.equal(finished.body.result.total, 5);
+  assert.equal(finished.body.result.total, questions.length);
 });
 
 describe('a question from another session is refused', async () => {
   const a = await call('/api/player', { method: 'POST', body: { displayName: 'Alex' } });
   const b = await call('/api/player', { method: 'POST', body: { displayName: 'Robin' } });
 
-  const sessionA = await call('/api/session', {
-    method: 'POST', token: a.body.token, body: { category: 'geography', count: 3 },
-  });
-  const sessionB = await call('/api/session', {
-    method: 'POST', token: b.body.token, body: { category: 'geography', count: 3 },
-  });
+  const sessionA = await startQuiz('geography', a.body.token);
+  const sessionB = await startQuiz('geography', b.body.token);
+
+  // Both players play the same category on the same day, so they get the
+  // identical fixed set — this in itself is the "everyone gets the same quiz"
+  // guarantee.
+  assert.deepEqual(
+    sessionA.body.questions.map((q) => q.id),
+    sessionB.body.questions.map((q) => q.id),
+  );
 
   // B tries to answer into A's session.
   const crossSession = await call('/api/answer', {
@@ -237,17 +240,20 @@ describe('a question from another session is refused', async () => {
   });
   assert.equal(crossSession.status, 403, "a session must not accept another player's answers");
 
-  // A question that is not part of the session is refused even for the owner.
-  const foreignQuestion = sessionB.body.questions.find(
-    (q) => !sessionA.body.questions.some((x) => x.id === q.id),
+  // A real bank question that is not part of today's fixed set is refused even
+  // for the session's own owner.
+  const inSet = new Set(sessionA.body.questions.map((q) => q.id));
+  const { rows } = await db.query(
+    'SELECT id FROM questions WHERE category = $1 AND NOT (id = ANY($2)) LIMIT 1',
+    ['geography', [...inSet]],
   );
-  if (foreignQuestion) {
+  if (rows.length) {
     const wrongQuestion = await call('/api/answer', {
       method: 'POST',
       token: a.body.token,
       body: {
         sessionId: sessionA.body.session.id,
-        questionId: foreignQuestion.id,
+        questionId: rows[0].id,
         selectedAnswer: 0,
         responseMs: 2000,
       },
@@ -279,19 +285,37 @@ describe('/api/trivia hides answers from the public and reveals them to admins',
   delete process.env.TRIVIA_ADMIN_KEY;
 });
 
-describe('answer ordering is randomised per session but consistent within it', async () => {
+describe('a category quiz is a fixed set: replays reuse the same set and order as practice', async () => {
   const player = await call('/api/player', { method: 'POST', body: { displayName: 'Shuffle' } });
-  const orders = [];
-  for (let i = 0; i < 6; i += 1) {
-    const s = await call('/api/session', {
-      method: 'POST', token: player.body.token, body: { category: 'geography', count: 10 },
+
+  const first = await startQuiz('geography', player.body.token);
+  assert.equal(first.status, 201);
+  assert.equal(first.body.session.isPractice, false);
+
+  for (const q of first.body.questions) {
+    await call('/api/answer', {
+      method: 'POST',
+      token: player.body.token,
+      body: { sessionId: first.body.session.id, questionId: q.id, selectedAnswer: 0, responseMs: 3000 },
     });
-    for (const q of s.body.questions) orders.push(`${q.id}:${q.answers.join('|')}`);
   }
-  // With 10 questions over 6 sessions, identical ordering everywhere would mean
-  // the shuffle is not running at all.
-  const distinct = new Set(orders);
-  assert.ok(distinct.size > orders.length * 0.5, 'answer order should vary between sessions');
+  await call('/api/session', {
+    method: 'POST', token: player.body.token, body: { sessionId: first.body.session.id },
+  });
+
+  const replay = await startQuiz('geography', player.body.token);
+  assert.equal(replay.status, 201);
+  assert.equal(replay.body.session.isPractice, true, 'a replay after the scored attempt is practice');
+  assert.deepEqual(
+    replay.body.questions.map((q) => q.id),
+    first.body.questions.map((q) => q.id),
+    'the fixed set is identical on replay',
+  );
+  assert.deepEqual(
+    replay.body.questions.map((q) => q.answers),
+    first.body.questions.map((q) => q.answers),
+    'answer placement is identical on replay',
+  );
 });
 
 describe('friends, leaderboards and comparison', async () => {
@@ -422,7 +446,8 @@ describe('the daily challenge is identical for everyone and scored once', async 
   });
 
   const replay = await call('/api/daily-challenge', { method: 'POST', token: one.body.token });
-  assert.equal(replay.status, 409, 'the daily challenge is scored once per player');
+  assert.equal(replay.status, 201, 'a replay after completion is allowed, but as practice');
+  assert.equal(replay.body.session.isPractice, true, 'the daily challenge is scored once per player');
 
   const status = await call('/api/daily-challenge', { token: one.body.token });
   assert.equal(status.body.played, true);
@@ -457,7 +482,9 @@ describe('account recovery moves a player to a new device', async () => {
 });
 
 describe('unauthenticated gameplay is refused', async () => {
-  const session = await call('/api/session', { method: 'POST', body: { category: 'geography' } });
+  const quiz = await call('/api/daily-challenge?category=geography', { method: 'POST', body: {} });
+  assert.equal(quiz.status, 401);
+  const session = await call('/api/session', { method: 'POST', body: {} });
   assert.equal(session.status, 401);
   const answer = await call('/api/answer', { method: 'POST', body: {} });
   assert.equal(answer.status, 401);

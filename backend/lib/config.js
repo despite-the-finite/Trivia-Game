@@ -8,47 +8,55 @@ const int = (value, fallback) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-export const CATEGORIES = ['current-events', 'science', 'geography'];
+export const CATEGORIES = ['current-events', 'science', 'geography', 'general-knowledge'];
 export const PLAYABLE_CATEGORIES = [...CATEGORIES, 'mixed'];
-export const DIFFICULTIES = ['easy', 'medium', 'hard'];
 
 export const CATEGORY_LABELS = {
   'current-events': 'Current Events',
   science: 'Science',
   geography: 'Geography',
+  'general-knowledge': 'General Knowledge',
   mixed: 'Mixed',
 };
 
 /**
- * Freshness policy per category. `ttlMs` is how long a generated question stays
- * servable; `refreshEveryMs` is how often the pipeline re-gathers source
- * material. `targetPool` is how many live questions we try to keep banked so a
- * player request never has to wait on an upstream API or the LLM.
+ * Freshness policy per category. Every category now materializes one fixed,
+ * shared question set per UTC day (see dailyChallengeService), so `targetPool`
+ * only needs to comfortably cover that day's quiz plus validation attrition —
+ * not a large rotating bank. `ttlMs` is kept a little above `refreshEveryMs` as
+ * a safety buffer; `refreshEveryMs` is how often the pipeline re-gathers source
+ * material.
  */
 export const FRESHNESS = {
   'current-events': {
-    refreshEveryMs: int(process.env.REFRESH_CURRENT_EVENTS_MS, 45 * 60 * 1000), // ~45 min
-    ttlMs: int(process.env.TTL_CURRENT_EVENTS_MS, 36 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_CURRENT_EVENTS, 80),
-    batchSize: int(process.env.BATCH_CURRENT_EVENTS, 60),
+    refreshEveryMs: int(process.env.REFRESH_CURRENT_EVENTS_MS, 24 * 60 * 60 * 1000), // 24 hours
+    ttlMs: int(process.env.TTL_CURRENT_EVENTS_MS, 48 * 60 * 60 * 1000),
+    targetPool: int(process.env.POOL_CURRENT_EVENTS, 20),
+    batchSize: int(process.env.BATCH_CURRENT_EVENTS, 30),
   },
   science: {
-    refreshEveryMs: int(process.env.REFRESH_SCIENCE_MS, 6 * 60 * 60 * 1000), // 6 hours
-    ttlMs: int(process.env.TTL_SCIENCE_MS, 14 * 24 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_SCIENCE, 80),
-    batchSize: int(process.env.BATCH_SCIENCE, 60),
+    refreshEveryMs: int(process.env.REFRESH_SCIENCE_MS, 24 * 60 * 60 * 1000), // 24 hours
+    ttlMs: int(process.env.TTL_SCIENCE_MS, 48 * 60 * 60 * 1000),
+    targetPool: int(process.env.POOL_SCIENCE, 20),
+    batchSize: int(process.env.BATCH_SCIENCE, 30),
   },
   geography: {
-    refreshEveryMs: int(process.env.REFRESH_GEOGRAPHY_MS, 30 * 24 * 60 * 60 * 1000), // 30 days
-    ttlMs: int(process.env.TTL_GEOGRAPHY_MS, 60 * 24 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_GEOGRAPHY, 150),
-    batchSize: int(process.env.BATCH_GEOGRAPHY, 120),
+    refreshEveryMs: int(process.env.REFRESH_GEOGRAPHY_MS, 24 * 60 * 60 * 1000), // 24 hours
+    ttlMs: int(process.env.TTL_GEOGRAPHY_MS, 48 * 60 * 60 * 1000),
+    targetPool: int(process.env.POOL_GEOGRAPHY, 20),
+    batchSize: int(process.env.BATCH_GEOGRAPHY, 30),
+  },
+  'general-knowledge': {
+    refreshEveryMs: int(process.env.REFRESH_GENERAL_KNOWLEDGE_MS, 24 * 60 * 60 * 1000), // 24 hours
+    ttlMs: int(process.env.TTL_GENERAL_KNOWLEDGE_MS, 48 * 60 * 60 * 1000),
+    targetPool: int(process.env.POOL_GENERAL_KNOWLEDGE, 20),
+    batchSize: int(process.env.BATCH_GENERAL_KNOWLEDGE, 30),
   },
 };
 
 export const SCORING = {
-  base: { easy: 100, medium: 150, hard: 200 },
-  maxSpeedBonus: { easy: 50, medium: 75, hard: 100 },
+  base: int(process.env.SCORING_BASE_POINTS, 150),
+  maxSpeedBonus: int(process.env.SCORING_MAX_SPEED_BONUS, 75),
   /** Answers at or under this are treated as "instant" and earn the full bonus. */
   fullBonusMs: int(process.env.SPEED_FULL_BONUS_MS, 2000),
   /** Per-question time limit. At or beyond this, the speed bonus is zero. */
@@ -111,7 +119,7 @@ export const APP = {
     .filter(Boolean),
   userAgent:
     process.env.FETCH_USER_AGENT ||
-    'LiveTriviaBot/1.0 (+https://github.com/despite-the-finite/Trivia-Game)',
+    'EntropicBrainwavesBot/1.0 (+https://github.com/despite-the-finite/Trivia-Game)',
   fetchTimeoutMs: int(process.env.FETCH_TIMEOUT_MS, 12000),
 };
 

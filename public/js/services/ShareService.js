@@ -13,7 +13,7 @@ export class ShareService {
   /**
    * @returns {Promise<'shared'|'copied'|'cancelled'|'failed'>}
    */
-  static async share({ title = 'Live Trivia', text, url }) {
+  static async share({ title = 'Entropic Brainwaves', text, url }) {
     if (ShareService.canShareNatively) {
       try {
         await navigator.share({ title, text, url });
@@ -56,20 +56,20 @@ export class ShareService {
   // --- Message builders ---------------------------------------------------
 
   static scoreText({ score, correct, total, mode }) {
-    const label = mode === 'daily' ? 'the Daily Trivia Challenge' : 'Live Trivia';
+    const label = mode === 'daily' ? "today's quiz" : 'Entropic Brainwaves';
     return `I scored ${score.toLocaleString('en-US')} points with ${correct}/${total} correct in ${label}. Think you can beat me?`;
   }
 
   static dailyText({ score, correct, total }) {
-    return `I scored ${score.toLocaleString('en-US')} on today's Daily Trivia Challenge (${correct}/${total} correct). Can you beat me?`;
+    return `I scored ${score.toLocaleString('en-US')} on today's Entropic Brainwaves quiz (${correct}/${total} correct). Can you beat me?`;
   }
 
   static challengeInviteText(displayName) {
-    return `${displayName} challenged you to a round of Live Trivia — same questions, same order. Think you can win?`;
+    return `${displayName} challenged you to a round of Entropic Brainwaves — same questions, same order. Think you can win?`;
   }
 
   static friendCodeText(displayName, friendCode) {
-    return `Add me on Live Trivia — I'm ${displayName}, friend code ${friendCode}.`;
+    return `Add me on Entropic Brainwaves — I'm ${displayName}, friend code ${friendCode}.`;
   }
 }
 

@@ -1,5 +1,5 @@
 import { queryRows } from '../db/index.js';
-import { CATEGORIES, DIFFICULTIES, FRESHNESS } from '../lib/config.js';
+import { CATEGORIES, FRESHNESS } from '../lib/config.js';
 import { shuffle } from '../lib/ids.js';
 
 /**
@@ -7,7 +7,7 @@ import { shuffle } from '../lib/ids.js';
  * for the wire.
  *
  * Two shapes exist and the difference is the whole anti-cheat story:
- *   * play shape    — id, question, answers, category, difficulty. No answer.
+ *   * play shape    — id, question, answers, category. No answer.
  *   * full shape    — everything, including correctAnswer and explanation.
  * The play shape is what a browser gets before it submits an answer.
  */
@@ -25,26 +25,19 @@ export function isCategory(value) {
  */
 export async function pickQuestions({
   category = 'mixed',
-  difficulty = null,
   count = 10,
   excludeIds = [],
 } = {}) {
   const categories = category === 'mixed' ? CATEGORIES : [category];
   const params = [categories, count, excludeIds.length ? excludeIds : null];
-  let difficultyClause = '';
-  if (difficulty && DIFFICULTIES.includes(difficulty)) {
-    params.push(difficulty);
-    difficultyClause = `AND difficulty = $${params.length}`;
-  }
 
   const rows = await queryRows(
-    `SELECT id, category, difficulty, question, answers, correct_index, explanation,
+    `SELECT id, category, question, answers, correct_index, explanation,
             source, source_url, source_published_at, generated_at, expires_at
        FROM questions
       WHERE active
         AND expires_at > NOW()
         AND category = ANY($1)
-        ${difficultyClause}
         AND ($3::uuid[] IS NULL OR NOT (id = ANY($3)))
       ORDER BY (times_served <= (SELECT COALESCE(MIN(times_served), 0) + 2
                                    FROM questions
@@ -58,12 +51,12 @@ export async function pickQuestions({
 }
 
 /**
- * Builds a balanced mixed set: for `mixed` we want an even spread across the
- * three categories rather than whatever the bank happens to be heaviest in.
+ * Builds a balanced mixed set: for `mixed` we want an even spread across
+ * categories rather than whatever the bank happens to be heaviest in.
  */
-export async function pickBalancedSet({ category, difficulty, count, excludeIds = [] }) {
+export async function pickBalancedSet({ category, count, excludeIds = [] }) {
   if (category !== 'mixed') {
-    return pickQuestions({ category, difficulty, count, excludeIds });
+    return pickQuestions({ category, count, excludeIds });
   }
 
   const perCategory = Math.ceil(count / CATEGORIES.length);
@@ -73,7 +66,6 @@ export async function pickBalancedSet({ category, difficulty, count, excludeIds 
   for (const cat of shuffle(CATEGORIES)) {
     const rows = await pickQuestions({
       category: cat,
-      difficulty,
       count: perCategory,
       excludeIds: [...used],
     });
@@ -87,7 +79,6 @@ export async function pickBalancedSet({ category, difficulty, count, excludeIds 
   if (collected.length < count) {
     const filler = await pickQuestions({
       category: 'mixed',
-      difficulty,
       count: count - collected.length,
       excludeIds: [...used],
     });
@@ -100,7 +91,7 @@ export async function pickBalancedSet({ category, difficulty, count, excludeIds 
 export async function getQuestionsByIds(ids) {
   if (!ids?.length) return [];
   const rows = await queryRows(
-    `SELECT id, category, difficulty, question, answers, correct_index, explanation,
+    `SELECT id, category, question, answers, correct_index, explanation,
             source, source_url, source_published_at, generated_at, expires_at
        FROM questions
       WHERE id = ANY($1)`,
@@ -135,7 +126,6 @@ export function toPlayShape(question, order, position) {
     id: question.id,
     position,
     category: question.category,
-    difficulty: question.difficulty,
     question: question.question,
     answers: displayAnswers(question, order),
   };
@@ -150,7 +140,6 @@ export function toFullShape(question, order = null) {
   return {
     id: question.id,
     category: question.category,
-    difficulty: question.difficulty,
     question: question.question,
     answers,
     correctAnswer: answers[correctDisplayIndex],

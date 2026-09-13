@@ -61,14 +61,14 @@ export class TriviaService {
     return this;
   }
 
-  async startQuickGame({ category = 'mixed', difficulty = 'any', count } = {}) {
-    const payload = await this.api.post('/session', { category, difficulty, count });
+  /** Starts (or resumes) the given category's fixed quiz for today. */
+  async startCategoryQuiz(category = 'mixed') {
+    const payload = await this.api.post('/daily-challenge', {}, { category });
     return this.adopt(payload);
   }
 
   async startDailyChallenge() {
-    const payload = await this.api.post('/daily-challenge', {});
-    return this.adopt(payload);
+    return this.startCategoryQuiz('mixed');
   }
 
   async startChallenge(slug) {
@@ -130,12 +130,12 @@ export class TriviaService {
     return data.questions;
   }
 
-  async dailyStatus() {
-    return this.api.get('/daily-challenge');
+  async dailyStatus(category = 'mixed') {
+    return this.api.get('/daily-challenge', { category });
   }
 
-  async dailyLeaderboard(scope = 'global') {
-    return this.api.get('/daily-challenge', { view: 'leaderboard', scope });
+  async dailyLeaderboard(scope = 'global', category = 'mixed') {
+    return this.api.get('/daily-challenge', { view: 'leaderboard', scope, category });
   }
 }
 

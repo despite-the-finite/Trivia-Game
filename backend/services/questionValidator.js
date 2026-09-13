@@ -1,5 +1,4 @@
 import { sha256 } from '../lib/ids.js';
-import { DIFFICULTIES } from '../lib/config.js';
 
 /**
  * questionValidator — the gate between "a model produced something" and "a
@@ -82,7 +81,6 @@ export function validateQuestion(candidate, context = {}) {
   // --- Shape ------------------------------------------------------------
   const question = typeof candidate.question === 'string' ? candidate.question.trim() : '';
   const explanation = typeof candidate.explanation === 'string' ? candidate.explanation.trim() : '';
-  const difficulty = typeof candidate.difficulty === 'string' ? candidate.difficulty.toLowerCase() : '';
   const answers = Array.isArray(candidate.answers) ? candidate.answers.map((a) => String(a).trim()) : [];
   const correctAnswer =
     typeof candidate.correctAnswer === 'string' ? candidate.correctAnswer.trim() : '';
@@ -92,7 +90,6 @@ export function validateQuestion(candidate, context = {}) {
   if (!question.endsWith('?')) fail('question-not-interrogative');
   if (explanation.length < 20) fail('explanation-too-short');
   if (explanation.length > 400) fail('explanation-too-long');
-  if (!DIFFICULTIES.includes(difficulty)) fail('invalid-difficulty');
 
   // --- Answer options ---------------------------------------------------
   if (answers.length !== 4) fail('needs-exactly-four-answers');
@@ -159,7 +156,6 @@ export function validateQuestion(candidate, context = {}) {
       correctIndex,
       correctAnswer: answers[correctIndex],
       explanation,
-      difficulty,
       sourceUrl,
       fingerprint: fp,
     },

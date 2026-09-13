@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#12101c" />
     <meta name="color-scheme" content="dark light" />
-    <title>Live Trivia</title>
+    <title>Entropic Brainwaves</title>
     <meta
       name="description"
-      content="Trivia built from today's news, science and world geography. Play, compare with friends, and send a challenge."
+      content="Entropic Brainwaves: trivia built from today's news, science, geography and general knowledge. One quiz per category per day — play, compare with friends, and send a challenge."
     />
     <link rel="stylesheet" href="/styles.css" />
     <link
@@ -38,13 +38,34 @@
         </div>
       </section>
 
+      <!-- Cover / entry page ------------------------------------------------>
+      <section class="screen" data-screen="cover">
+        <div class="panel panel--centered">
+          <h1 class="panel__title panel__title--hero">Entropic Brainwaves</h1>
+          <p class="panel__subtitle">Trivia built fresh from the live internet, every day.</p>
+          <ul class="coverlist">
+            <li><span class="coverlist__icon" aria-hidden="true">🔄</span> Every category resets once a day — same questions for everyone</li>
+            <li><span class="coverlist__icon" aria-hidden="true">🥇</span> Your first completed attempt is the one that scores</li>
+            <li><span class="coverlist__icon" aria-hidden="true">👥</span> Compare results with friends and the leaderboard</li>
+            <li><span class="coverlist__icon" aria-hidden="true">⚔️</span> Send a head-to-head challenge with a shareable link</li>
+          </ul>
+          <div class="chipgrid chipgrid--tight coverlist__categories" aria-label="Categories">
+            <span class="chip chip--small">Current Events</span>
+            <span class="chip chip--small">Science</span>
+            <span class="chip chip--small">Geography</span>
+            <span class="chip chip--small">General Knowledge</span>
+            <span class="chip chip--small">Mixed</span>
+          </div>
+          <button class="btn btn--primary btn--block" data-action="get-started">GET STARTED</button>
+        </div>
+      </section>
+
       <!-- Onboarding ------------------------------------------------------->
       <section class="screen" data-screen="onboarding">
         <div class="panel panel--centered">
-          <h1 class="panel__title panel__title--hero">Live Trivia</h1>
+          <h1 class="panel__title">Set up your player</h1>
           <p class="panel__body">
-            Questions written from today's news, science reporting and world
-            geography data. Pick a name — that's the whole sign-up.
+            Pick a name — that's the whole sign-up.
           </p>
           <form class="form" data-role="onboarding-form">
             <label class="field">
@@ -103,16 +124,10 @@
           <div class="section">
             <h2 class="section__title">Quick play</h2>
             <div class="chipgrid" data-role="category-chips">
-              <button class="chip is-selected" data-category="mixed">Mixed</button>
-              <button class="chip" data-category="current-events">Current Events</button>
+              <button class="chip is-selected" data-category="current-events">Current Events</button>
               <button class="chip" data-category="science">Science</button>
               <button class="chip" data-category="geography">Geography</button>
-            </div>
-            <div class="chipgrid chipgrid--tight" data-role="difficulty-chips">
-              <button class="chip chip--small is-selected" data-difficulty="any">Any level</button>
-              <button class="chip chip--small" data-difficulty="easy">Easy</button>
-              <button class="chip chip--small" data-difficulty="medium">Medium</button>
-              <button class="chip chip--small" data-difficulty="hard">Hard</button>
+              <button class="chip" data-category="general-knowledge">General Knowledge</button>
             </div>
             <button class="btn btn--primary btn--block" data-action="play-quick">PLAY</button>
           </div>
@@ -144,7 +159,6 @@
         <main class="question" data-role="question-card">
           <p class="question__tags">
             <span class="tag" data-role="q-category"></span>
-            <span class="tag tag--difficulty" data-role="q-difficulty"></span>
           </p>
           <h2 class="question__text" data-role="q-text"></h2>
           <div class="answers" data-role="answers" role="group" aria-label="Answer options"></div>
@@ -211,6 +225,7 @@
             <button class="chip chip--small" data-board="current-events">Current Events</button>
             <button class="chip chip--small" data-board="science">Science</button>
             <button class="chip chip--small" data-board="geography">Geography</button>
+            <button class="chip chip--small" data-board="general-knowledge">General Knowledge</button>
             <button class="chip chip--small" data-board="accuracy">Accuracy</button>
             <button class="chip chip--small" data-board="streak">Longest streak</button>
           </div>

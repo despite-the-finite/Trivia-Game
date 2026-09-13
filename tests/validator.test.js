@@ -13,7 +13,6 @@ const good = (overrides = {}) => ({
   answers: ['Portugal', 'Denmark', 'Uruguay', 'Malaysia'],
   correctAnswer: 'Portugal',
   explanation: 'The summit was held in Portugal, according to the reporting on the day.',
-  difficulty: 'medium',
   sourceUrl: SOURCE,
   ...overrides,
 });
@@ -129,12 +128,6 @@ test('questions must end in a question mark', () => {
   );
   assert.equal(result.ok, false);
   assert.ok(result.reasons.includes('question-not-interrogative'));
-});
-
-test('an invalid difficulty is rejected', () => {
-  const result = validateQuestion(good({ difficulty: 'expert' }), context);
-  assert.equal(result.ok, false);
-  assert.ok(result.reasons.includes('invalid-difficulty'));
 });
 
 test('duplicates within one batch are caught', () => {

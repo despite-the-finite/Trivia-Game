@@ -18,8 +18,8 @@ export class ChallengeService {
     return match ? match[1].toLowerCase() : null;
   }
 
-  async create({ category = 'mixed', difficulty = 'any', count } = {}) {
-    return this.api.post('/challenge', { category, difficulty, count });
+  async create({ category = 'mixed', count } = {}) {
+    return this.api.post('/challenge', { category, count });
   }
 
   async results(slug) {

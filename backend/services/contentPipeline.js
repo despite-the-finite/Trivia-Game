@@ -3,6 +3,7 @@ import { CATEGORIES, FRESHNESS } from '../lib/config.js';
 import newsProvider from '../providers/newsProvider.js';
 import scienceProvider from '../providers/scienceProvider.js';
 import geographyProvider from '../providers/geographyProvider.js';
+import generalKnowledgeProvider from '../providers/generalKnowledgeProvider.js';
 import { generateFromDocuments, generateGeography } from './questionGenerator.js';
 import { isLlmEnabled } from './llm.js';
 
@@ -25,6 +26,7 @@ const PROVIDERS = {
   'current-events': newsProvider,
   science: scienceProvider,
   geography: geographyProvider,
+  'general-knowledge': generalKnowledgeProvider,
 };
 
 /** Guards against two instances refreshing the same category at once. */
@@ -41,11 +43,8 @@ let backgroundChain = Promise.resolve();
 export async function poolStatus(category) {
   const row = await queryOne(
     `SELECT
-        COUNT(*)::int                                             AS total,
-        COUNT(*) FILTER (WHERE difficulty = 'easy')::int          AS easy,
-        COUNT(*) FILTER (WHERE difficulty = 'medium')::int        AS medium,
-        COUNT(*) FILTER (WHERE difficulty = 'hard')::int          AS hard,
-        MAX(generated_at)                                         AS newest
+        COUNT(*)::int AS total,
+        MAX(generated_at) AS newest
        FROM questions
       WHERE category = $1 AND active AND expires_at > NOW()`,
     [category],
@@ -59,7 +58,6 @@ export async function poolStatus(category) {
   return {
     category,
     total: row?.total ?? 0,
-    byDifficulty: { easy: row?.easy ?? 0, medium: row?.medium ?? 0, hard: row?.hard ?? 0 },
     newest: row?.newest ?? null,
     lastRefreshAt: lastRun?.started_at ?? null,
   };
@@ -108,14 +106,13 @@ async function storeQuestions(client, questions, { category, ttlMs }) {
   for (const q of questions) {
     const { rowCount } = await client.query(
       `INSERT INTO questions
-         (category, difficulty, question, answers, correct_index, explanation,
+         (category, question, answers, correct_index, explanation,
           source, source_url, source_published_at, source_document_id,
           generator, expires_at, fingerprint)
-       VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        ON CONFLICT (fingerprint) DO NOTHING`,
       [
         category,
-        q.difficulty,
         q.question,
         JSON.stringify(q.answers),
         q.correctIndex,

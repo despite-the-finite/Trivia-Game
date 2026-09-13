@@ -64,8 +64,8 @@ export function streakMultiplier(streak) {
  * Speed bonus decays linearly from the full amount (at or under `fullBonusMs`)
  * to zero (at the time limit). Simple enough that a player can predict it.
  */
-export function speedBonus({ difficulty, responseMs, suspicious }) {
-  const max = SCORING.maxSpeedBonus[difficulty] ?? SCORING.maxSpeedBonus.easy;
+export function speedBonus({ responseMs, suspicious }) {
+  const max = SCORING.maxSpeedBonus;
   if (suspicious) return 0;
 
   const { fullBonusMs, questionTimeLimitMs } = SCORING;
@@ -80,14 +80,13 @@ export function speedBonus({ difficulty, responseMs, suspicious }) {
 /**
  * @param {object} input
  * @param {boolean} input.correct
- * @param {'easy'|'medium'|'hard'} input.difficulty
  * @param {number} input.responseMs   Already reconciled.
  * @param {number} input.currentStreak Streak BEFORE this answer.
  * @param {string[]} input.flags
  * @returns {{points:number, basePoints:number, speedBonus:number, streakMultiplier:number,
  *            streakLabel:string|null, newStreak:number, flags:string[]}}
  */
-export function scoreAnswer({ correct, difficulty, responseMs, currentStreak = 0, flags = [] }) {
+export function scoreAnswer({ correct, responseMs, currentStreak = 0, flags = [] }) {
   const allFlags = [...flags];
 
   if (!correct) {
@@ -105,8 +104,8 @@ export function scoreAnswer({ correct, difficulty, responseMs, currentStreak = 0
   const suspicious = responseMs < SCORING.minPlausibleMs;
   if (suspicious) allFlags.push('implausibly-fast');
 
-  const basePoints = SCORING.base[difficulty] ?? SCORING.base.easy;
-  const bonus = speedBonus({ difficulty, responseMs, suspicious });
+  const basePoints = SCORING.base;
+  const bonus = speedBonus({ responseMs, suspicious });
   const newStreak = currentStreak + 1;
   const tier = streakMultiplier(newStreak);
   const points = Math.round((basePoints + bonus) * tier.multiplier);

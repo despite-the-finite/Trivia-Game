@@ -19,8 +19,7 @@ import {
 
 const state = {
   screen: 'boot',
-  category: 'mixed',
-  difficulty: 'any',
+  category: 'current-events',
   pendingChallengeSlug: null,
   lastSummary: null,
   timer: null,
@@ -100,7 +99,7 @@ async function boot() {
   if (state.screen === 'offline') return;
 
   if (!player) {
-    showScreen('onboarding');
+    showScreen('cover');
     return;
   }
 
@@ -264,11 +263,6 @@ function renderQuestion() {
   }
 
   setText('q-category', CATEGORY_LABELS[question.category] ?? question.category);
-  const diff = role('q-difficulty');
-  if (diff) {
-    diff.textContent = question.difficulty;
-    diff.dataset.level = question.difficulty;
-  }
   setText('q-text', question.question);
 
   const answersNode = clear(role('answers'));
@@ -478,23 +472,19 @@ async function renderReview() {
 // Starting games
 // ---------------------------------------------------------------------------
 
-async function startQuickGame() {
+async function startCategoryQuiz() {
   sound.unlock();
   showScreen('boot');
-  const started = await guarded(
-    () =>
-      triviaService.startQuickGame({
-        category: state.category,
-        difficulty: state.difficulty,
-      }),
-    {
-      onError: (err) => {
-        toast(err.message);
-        showScreen('home');
-      },
+  const started = await guarded(() => triviaService.startCategoryQuiz(state.category), {
+    onError: (err) => {
+      toast(err.message);
+      showScreen('home');
     },
-  );
+  });
   if (!started) return;
+  if (started.session?.isPractice) {
+    toast("Today's score is already locked in — this run is practice only.");
+  }
   showScreen('game');
   renderQuestion();
 }
@@ -673,9 +663,7 @@ async function playChallenge(slug) {
 }
 
 async function createChallenge() {
-  const created = await guarded(() =>
-    challengeService.create({ category: state.category, difficulty: state.difficulty }),
-  );
+  const created = await guarded(() => challengeService.create({ category: state.category }));
   if (!created) return;
 
   const outcome = await ShareService.share({
@@ -847,18 +835,13 @@ function bindEvents() {
   document.addEventListener('pointerdown', () => sound.unlock(), { once: true });
 
   document.addEventListener('click', async (event) => {
-    const target = event.target.closest('[data-action], [data-category], [data-difficulty], [data-scope], [data-period], [data-board]');
+    const target = event.target.closest('[data-action], [data-category], [data-scope], [data-period], [data-board]');
     if (!target) return;
 
     // Filter chips / segmented controls
     if (target.dataset.category) {
       state.category = target.dataset.category;
       selectWithin(role('category-chips'), target);
-      return;
-    }
-    if (target.dataset.difficulty) {
-      state.difficulty = target.dataset.difficulty;
-      selectWithin(role('difficulty-chips'), target);
       return;
     }
     if (target.dataset.scope) {
@@ -884,12 +867,15 @@ function bindEvents() {
       case 'retry-connection':
         await boot();
         break;
+      case 'get-started':
+        showScreen('onboarding');
+        break;
       case 'show-restore':
         show(role('restore-form'), true);
         target.hidden = true;
         break;
       case 'play-quick':
-        await startQuickGame();
+        await startCategoryQuiz();
         break;
       case 'play-daily':
         await startDaily();
@@ -903,7 +889,7 @@ function bindEvents() {
         else await renderHome();
         break;
       case 'play-again':
-        await startQuickGame();
+        await startCategoryQuiz();
         break;
       case 'challenge-friend':
         await createChallenge();

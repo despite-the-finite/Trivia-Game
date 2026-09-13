@@ -39,7 +39,7 @@ export default createHandler({
 
     const created = await createChallenge(
       { ...player, displayName: player.display_name },
-      { category: body.category, difficulty: body.difficulty, count: body.count },
+      { category: body.category, count: body.count },
     );
     return withStatus(201, created);
   },
