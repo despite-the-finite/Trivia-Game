@@ -84,8 +84,8 @@ enough to get a playable game.
 The `api/` directory is a set of Vercel serverless functions and `public/` is a
 static frontend, so `vercel deploy` works with no build step. Set `DATABASE_URL`
 (use a **pooled** connection string), `ANTHROPIC_API_KEY`, `PUBLIC_BASE_URL` and
-`CRON_SECRET`. `vercel.json` registers the content-refresh cron at `*/30 * * * *`;
-each category then decides for itself whether it is actually due.
+`CRON_SECRET`. `vercel.json` registers the content-refresh cron once a day at
+midnight UTC; each category then decides for itself whether it is actually due.
 
 Any Postgres works — Neon, Supabase, RDS, or a local server.
 

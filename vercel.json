@@ -2,14 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/**/*.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/cron/refresh",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 0 * * *"
     }
   ],
   "rewrites": [

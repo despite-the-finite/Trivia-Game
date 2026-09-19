@@ -6,11 +6,11 @@ import { refreshDueCategories, refreshCategory, poolStatus } from '../../backend
 /**
  * GET /api/cron/refresh
  *
- * The scheduled entry point for content generation. Vercel Cron calls this with
- * the `Authorization: Bearer $CRON_SECRET` header (see vercel.json). Each
- * category decides for itself whether it is due, using the freshness policy in
- * config.js — current events roughly every 45 minutes, science every 6 hours,
- * geography monthly.
+ * The scheduled entry point for content generation. Vercel Cron calls this once
+ * a day with the `Authorization: Bearer $CRON_SECRET` header (see vercel.json).
+ * Every category refreshes once every 24 hours, so a single daily trigger
+ * covers all of them; each category still decides for itself whether it is due
+ * using the freshness policy in config.js.
  *
  * Query params:
  *   ?category=<name>  refresh one category only
