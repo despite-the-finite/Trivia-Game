@@ -1,21 +1,48 @@
 import { queryRows } from '../db/index.js';
+import { CATEGORIES } from '../lib/config.js';
+import { badRequest } from '../lib/http.js';
 
 /**
  * leaderboardService — the permanent home-screen leaderboard.
  *
- * Ranking is by all-time overall score, read straight from the `player_stats`
- * cache (the same numbers the home screen's own stat tiles use) rather than
- * aggregated from the ledger — there is no time-period filter here, just one
- * standing board. Each row is broken out by category so a player's strengths
- * are visible at a glance.
+ * Ranking is for one UTC calendar day at a time — points a player earned
+ * that specific day, summed from the `score_events` ledger — rather than an
+ * all-time total, so the board reflects "today," not whoever has played the
+ * longest. Each row is broken out by category. History only reaches back
+ * `HISTORY_DAYS` days; older days are simply not offered as a query option
+ * (the ledger itself is untouched, since personal weekly/monthly stats
+ * elsewhere still read further back than that).
  */
 
-const CATEGORY_COLUMNS = {
-  'current-events': 'current_events_score',
-  science: 'science_score',
-  geography: 'geography_score',
-  'general-knowledge': 'general_knowledge_score',
-};
+export const HISTORY_DAYS = 5;
+
+export function todayUtc() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** The most recent `HISTORY_DAYS` UTC calendar days, today first. */
+export function recentUtcDays(count = HISTORY_DAYS) {
+  const days = [];
+  const now = new Date();
+  for (let i = 0; i < count; i += 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+const isDayString = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** Validates and normalises a `day` query param against the retained window. */
+export function parseHistoryDay(value) {
+  if (value === undefined || value === null || value === '') return todayUtc();
+  if (!isDayString(value)) throw badRequest('day must be a date in YYYY-MM-DD form.');
+  const available = recentUtcDays();
+  if (!available.includes(value)) {
+    throw badRequest(`day must be one of the last ${HISTORY_DAYS} days: ${available.join(', ')}.`);
+  }
+  return value;
+}
 
 function shapeRow(row) {
   return {
@@ -34,19 +61,34 @@ function shapeRow(row) {
 
 /**
  * @param {object} opts
+ * @param {string} [opts.day]  UTC day (YYYY-MM-DD); defaults to today.
  * @param {string|null} opts.viewerId
  * @param {number} opts.limit  How many top rows to return (the "11th row" for
  *   the viewer, when they fall outside this slice, is returned separately).
  */
-export async function getOverallLeaderboard({ viewerId = null, limit = 10 } = {}) {
+export async function getDayLeaderboard({ day = todayUtc(), viewerId = null, limit = 10 } = {}) {
+  const start = new Date(`${day}T00:00:00.000Z`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
   const rows = await queryRows(
-    `SELECT p.id, p.display_name, s.total_score,
-            s.current_events_score, s.science_score, s.geography_score, s.general_knowledge_score,
-            RANK() OVER (ORDER BY s.total_score DESC) AS rank
-       FROM players p
-       JOIN player_stats s ON s.player_id = p.id
-      WHERE s.games_played > 0
+    `SELECT p.id, p.display_name, d.total_score,
+            d.current_events_score, d.science_score, d.geography_score, d.general_knowledge_score,
+            RANK() OVER (ORDER BY d.total_score DESC) AS rank
+       FROM (
+         SELECT player_id,
+                SUM(points)::int AS total_score,
+                SUM(points) FILTER (WHERE category = 'current-events')::int    AS current_events_score,
+                SUM(points) FILTER (WHERE category = 'science')::int          AS science_score,
+                SUM(points) FILTER (WHERE category = 'geography')::int        AS geography_score,
+                SUM(points) FILTER (WHERE category = 'general-knowledge')::int AS general_knowledge_score
+           FROM score_events
+          WHERE created_at >= $1 AND created_at < $2
+          GROUP BY player_id
+         HAVING SUM(points) > 0
+       ) d
+       JOIN players p ON p.id = d.player_id
       ORDER BY rank, p.display_name ASC`,
+    [start.toISOString(), end.toISOString()],
   );
 
   const entries = rows.slice(0, limit).map((r) => ({ ...shapeRow(r), isViewer: r.id === viewerId }));
@@ -54,9 +96,10 @@ export async function getOverallLeaderboard({ viewerId = null, limit = 10 } = {}
   const viewerSource = !viewerInTop ? rows.find((r) => r.id === viewerId) : null;
 
   return {
+    day,
     entries,
     viewerRow: viewerSource ? { ...shapeRow(viewerSource), isViewer: true } : null,
-    categories: Object.keys(CATEGORY_COLUMNS),
+    categories: CATEGORIES,
   };
 }
 

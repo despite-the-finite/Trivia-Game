@@ -3,17 +3,18 @@ import { api } from './ApiClient.js';
 /**
  * LeaderboardService — the permanent home-screen leaderboard.
  *
- * One board: all-time overall score, broken out by category. No scope or
- * period filters — the server always returns the top slice plus the caller's
- * own row when they fall outside it.
+ * One board per UTC calendar day: points earned that day, broken out by
+ * category. The server returns the top slice plus the caller's own row when
+ * they fall outside it, and the short list of days still available to browse
+ * (a rolling history window, not an all-time archive).
  */
 export class LeaderboardService {
   constructor(client = api) {
     this.api = client;
   }
 
-  async load({ limit = 10 } = {}) {
-    return this.api.get('/leaderboard', { limit });
+  async load({ day, limit = 10 } = {}) {
+    return this.api.get('/leaderboard', { day, limit });
   }
 }
 

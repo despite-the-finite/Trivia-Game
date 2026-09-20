@@ -314,7 +314,7 @@ describe('a category quiz is a fixed set: replays reuse the same set and order a
   );
 });
 
-describe('the leaderboard ranks by overall score and breaks it out by category', async () => {
+describe("the leaderboard ranks today's score and breaks it out by category", async () => {
   const karsh = await call('/api/player', { method: 'POST', body: { displayName: 'Kara' } });
   const alex = await call('/api/player', { method: 'POST', body: { displayName: 'Alexi' } });
 
@@ -330,16 +330,20 @@ describe('the leaderboard ranks by overall score and breaks it out by category',
     method: 'POST', token: karsh.body.token, body: { sessionId: run.body.session.id },
   });
 
+  const today = new Date().toISOString().slice(0, 10);
   const board = await call('/api/leaderboard?limit=10');
   assert.equal(board.status, 200);
+  assert.equal(board.body.day, today, 'defaults to today when no day is given');
+  assert.equal(board.body.availableDays.length, 5, 'exposes the 5-day retention window');
+  assert.equal(board.body.availableDays[0], today);
 
   const kara = board.body.entries.find((e) => e.displayName === 'Kara');
-  assert.ok(kara, 'a player who has played appears on the board');
+  assert.ok(kara, "a player who scored today appears on today's board");
   assert.ok(kara.categoryScores.geography > 0, 'category scores are broken out per category');
   assert.equal(
     kara.totalScore,
     kara.categoryScores.geography,
-    'overall score matches the one category played so far',
+    "today's total matches the one category played so far",
   );
 
   // A player who has never played does not clutter the board.
@@ -349,6 +353,18 @@ describe('the leaderboard ranks by overall score and breaks it out by category',
   const anon = await call('/api/leaderboard');
   assert.equal(anon.status, 200);
   assert.equal(anon.body.viewerRow, null);
+
+  // A day outside the retained window is refused rather than silently
+  // returning an empty (or worse, unbounded) board.
+  const tooOld = await call('/api/leaderboard?day=2000-01-01');
+  assert.equal(tooOld.status, 400);
+
+  // Yesterday has no data yet, but it is still a valid, in-window day.
+  const yesterday = board.body.availableDays[1];
+  const priorDay = await call(`/api/leaderboard?day=${yesterday}`);
+  assert.equal(priorDay.status, 200);
+  assert.equal(priorDay.body.day, yesterday);
+  assert.equal(priorDay.body.entries.length, 0);
 });
 
 describe('the daily challenge is identical for everyone and scored once', async () => {

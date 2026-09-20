@@ -6,48 +6,168 @@ import { sha256 } from '../lib/ids.js';
  *
  * Geography is the category where we deliberately do NOT let a model decide
  * what is true. Every fact here comes from a structured dataset fetched over
- * the network (REST Countries, Wikidata), and the question templates derive the
- * answer *and* the distractors from that same data. The LLM's only optional
- * role downstream is rephrasing the question text — never determining the
- * answer.
+ * the network (Wikidata), and the question templates derive the answer *and*
+ * the distractors from that same data. The LLM's only optional role
+ * downstream is rephrasing the question text — never determining the answer.
+ *
+ * Country data used to come from REST Countries, which deprecated its free
+ * v3.1 API (it now returns HTTP 200 with an error payload instead of data —
+ * see https://restcountries.com/docs/countries/legacy-api-deprecation). This
+ * pulls the same facts from Wikidata instead, the same source already used
+ * for mountains and rivers below.
  */
-
-const REST_COUNTRIES_URL =
-  process.env.REST_COUNTRIES_URL ||
-  'https://restcountries.com/v3.1/all?fields=name,cca3,capital,population,area,region,subregion,borders,currencies,languages,flags,independent,unMember';
 
 const WIKIDATA_SPARQL = process.env.WIKIDATA_SPARQL_URL || 'https://query.wikidata.org/sparql';
 
-async function sparql(query) {
+/**
+ * The public Wikidata endpoint is shared infrastructure and can be slow or
+ * briefly rate-limit under load. One retry after a short pause absorbs that
+ * without needing the whole category refresh to fail and wait a day.
+ */
+async function sparql(query, { timeoutMs = 45000, retries = 1 } = {}) {
   const url = `${WIKIDATA_SPARQL}?query=${encodeURIComponent(query)}&format=json`;
-  const body = await fetchJson(url, { accept: 'application/sparql-results+json', timeoutMs: 25000 });
-  return body?.results?.bindings ?? [];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const body = await fetchJson(url, { accept: 'application/sparql-results+json', timeoutMs });
+      return body?.results?.bindings ?? [];
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
 }
 
-/** Countries: capitals, populations, area, region, borders, currencies, languages, flags. */
-async function collectCountries() {
-  const raw = await fetchJson(REST_COUNTRIES_URL, { timeoutMs: 25000 });
-  if (!Array.isArray(raw)) throw new Error('REST Countries returned an unexpected payload');
+const cell = (binding, key) => binding[key]?.value ?? null;
 
-  return raw
-    .filter((c) => c?.name?.common && c.unMember && c.independent)
-    .map((c) => ({
-      kind: 'country',
-      name: c.name.common,
-      officialName: c.name.official ?? c.name.common,
-      code: c.cca3,
-      capital: Array.isArray(c.capital) && c.capital.length === 1 ? c.capital[0] : null,
-      population: Number.isFinite(c.population) ? c.population : null,
-      area: Number.isFinite(c.area) ? c.area : null,
-      region: c.region ?? null,
-      subregion: c.subregion ?? null,
-      borders: Array.isArray(c.borders) ? c.borders : [],
-      currencies: c.currencies
-        ? Object.entries(c.currencies).map(([code, v]) => ({ code, name: v?.name ?? code }))
-        : [],
-      languages: c.languages ? Object.values(c.languages) : [],
-    }))
-    .filter((c) => c.name && c.region);
+// Every sovereign UN member: wdt:P31 (instance of) sovereign state, member of
+// the UN (wd:Q1065). This mirrors REST Countries' old independent+unMember
+// filter reasonably closely (~193 states).
+const COUNTRY_PATTERN = 'wdt:P31 wd:Q3624078; wdt:P298 ?code; wdt:P463 wd:Q1065';
+
+/**
+ * Countries: capitals, populations, area, continent, borders, currencies,
+ * languages — from Wikidata.
+ *
+ * Each multi-valued property (a country can have several borders, currencies,
+ * languages, or even capitals) is its own simple query, merged by ISO code in
+ * JS. Combining them into one query would join every combination of those
+ * properties together — a cartesian blow-up — for no benefit.
+ */
+async function collectCountries() {
+  // One at a time rather than in parallel: all five queries hit the same
+  // shared Wikidata endpoint, and firing them together makes an already
+  // slow public service more likely to time out or rate-limit every one of
+  // them at once. This runs as a background refresh, not on a player
+  // request, so trading a slower total time for reliability is the right
+  // call.
+  const core = await sparql(`
+    SELECT ?code (SAMPLE(?countryLabel) AS ?name) (SAMPLE(?continentLabel) AS ?continent)
+           (MAX(?population) AS ?pop) (MAX(?area) AS ?ar) WHERE {
+      ?country ${COUNTRY_PATTERN}.
+      OPTIONAL { ?country wdt:P1082 ?population. }
+      OPTIONAL { ?country wdt:P2046 ?area. }
+      OPTIONAL { ?country wdt:P30 ?continent. }
+      SERVICE wikibase:label {
+        bd:serviceParam wikibase:language "en".
+        ?country rdfs:label ?countryLabel.
+        ?continent rdfs:label ?continentLabel.
+      }
+    }
+    GROUP BY ?code
+  `);
+  // Not grouped/sampled: combining SAMPLE() with the label service silently
+  // drops the label on this endpoint. A plain pair list, deduped in JS, is
+  // both correct and simpler.
+  const capitals = await sparql(`
+    SELECT ?code ?capitalItemLabel WHERE {
+      ?country ${COUNTRY_PATTERN}; wdt:P36 ?capitalItem.
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+  `);
+  const borders = await sparql(`
+    SELECT ?code ?borderCode WHERE {
+      ?country ${COUNTRY_PATTERN}; wdt:P47 ?border.
+      ?border wdt:P298 ?borderCode.
+    }
+  `);
+  const currencies = await sparql(`
+    SELECT ?code ?currencyLabel WHERE {
+      ?country ${COUNTRY_PATTERN}; wdt:P38 ?currency.
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+  `);
+  const languages = await sparql(`
+    SELECT ?code ?languageLabel WHERE {
+      ?country ${COUNTRY_PATTERN}; wdt:P37 ?language.
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    }
+  `);
+
+  // The label service occasionally can't resolve a label (rare, but seen in
+  // practice for a handful of currency items) and falls back to printing the
+  // raw entity id instead — e.g. "Q4916" rather than "Euro". Reject anything
+  // shaped like a bare Wikidata id, the same guard already used for mountain
+  // and river names below.
+  const isRealLabel = (value) => typeof value === 'string' && value.length > 0 && !/^Q\d+$/.test(value);
+
+  const firstByCode = (rows, valueKey) => {
+    const map = new Map();
+    for (const row of rows) {
+      const code = cell(row, 'code');
+      const val = cell(row, valueKey);
+      if (code && isRealLabel(val) && !map.has(code)) map.set(code, val);
+    }
+    return map;
+  };
+
+  const setsByCode = (rows, valueKey) => {
+    const map = new Map();
+    for (const row of rows) {
+      const code = cell(row, 'code');
+      const val = cell(row, valueKey);
+      if (!code || !isRealLabel(val)) continue;
+      if (!map.has(code)) map.set(code, new Set());
+      map.get(code).add(val);
+    }
+    return map;
+  };
+
+  const capitalByCode = firstByCode(capitals, 'capitalItemLabel');
+  const bordersByCode = setsByCode(
+    borders.filter((r) => cell(r, 'code') !== cell(r, 'borderCode')),
+    'borderCode',
+  );
+  const currenciesByCode = setsByCode(currencies, 'currencyLabel');
+  const languagesByCode = setsByCode(languages, 'languageLabel');
+
+  return core
+    .map((row) => {
+      const code = cell(row, 'code');
+      const name = cell(row, 'name');
+      if (!code || !isRealLabel(name)) return null;
+
+      const population = Number.parseFloat(cell(row, 'pop'));
+      const area = Number.parseFloat(cell(row, 'ar'));
+      const continent = cell(row, 'continent');
+
+      return {
+        kind: 'country',
+        name,
+        code,
+        capital: capitalByCode.get(code) ?? null,
+        population: Number.isFinite(population) ? population : null,
+        area: Number.isFinite(area) ? area : null,
+        region: isRealLabel(continent) ? continent : null,
+        subregion: null,
+        borders: [...(bordersByCode.get(code) ?? [])],
+        currencies: [...(currenciesByCode.get(code) ?? [])].map((currencyName) => ({
+          code: '',
+          name: currencyName,
+        })),
+        languages: [...(languagesByCode.get(code) ?? [])],
+      };
+    })
+    .filter((c) => c && c.region);
 }
 
 async function collectPeaks() {
@@ -108,9 +228,9 @@ async function collectRivers() {
 
 const DATASETS = [
   {
-    id: 'rest-countries',
-    sourceName: 'REST Countries',
-    url: 'https://restcountries.com/',
+    id: 'wikidata-countries',
+    sourceName: 'Wikidata',
+    url: 'https://query.wikidata.org/',
     title: 'Country reference data (capitals, populations, borders, currencies, languages)',
     load: collectCountries,
   },
@@ -136,13 +256,16 @@ const DATASETS = [
  */
 export async function collect() {
   const now = new Date();
+  // All three datasets query the same shared Wikidata endpoint, and this is a
+  // background refresh rather than a player-facing request, so run them one
+  // at a time rather than piling concurrent load onto a public service.
   const loaded = await settleAll(
     DATASETS.map((dataset) => async () => {
       const records = await dataset.load();
       if (!records.length) throw new Error(`${dataset.id} returned no rows`);
       return { dataset, records };
     }),
-    { concurrency: 3, label: 'geographyProvider' },
+    { concurrency: 1, label: 'geographyProvider' },
   );
 
   return loaded.map(({ dataset, records }) => ({

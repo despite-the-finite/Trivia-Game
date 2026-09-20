@@ -498,6 +498,15 @@ button {
   color: var(--text-faint);
   margin: 0 0 10px;
 }
+.section__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.section__header .section__title {
+  margin: 0;
+}
 
 .chipgrid {
   display: flex;

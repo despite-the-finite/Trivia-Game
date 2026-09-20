@@ -39,10 +39,10 @@ Three ideas carry most of the design:
 
 **Facts and question-writing are separate jobs.** Providers fetch real source
 material — wire-service and public-broadcaster feeds for news, research-institution
-feeds for science, REST Countries and Wikidata for geography, Wikipedia's "On This
-Day" API for general knowledge — and store the title, URL, publisher and
-publication date. Only then is that material handed to a model, with instructions
-to write questions from it and nothing else. The model is never asked what is true.
+feeds for science, Wikidata for geography, Wikipedia's "On This Day" API for
+general knowledge — and store the title, URL, publisher and publication date.
+Only then is that material handed to a model, with instructions to write
+questions from it and nothing else. The model is never asked what is true.
 
 **Geography does not trust a model at all.** Its answers and its distractors both
 come out of structured datasets, through deterministic templates. The model's only
@@ -100,7 +100,7 @@ that day — see [Categories and the daily quiz](#categories-and-the-daily-quiz)
 |---|---|---|---|---|
 | Current Events | 24 h | 48 h | 20 | Reuters, AP, BBC, NPR, Al Jazeera, CBC, Guardian |
 | Science | 24 h | 48 h | 20 | NASA, ESA, Nature, Phys.org, ScienceDaily, NOAA, NIH, CERN |
-| Geography | 24 h | 48 h | 20 | REST Countries, Wikidata |
+| Geography | 24 h | 48 h | 20 | Wikidata |
 | General Knowledge | 24 h | 48 h | 20 | Wikipedia "On This Day" |
 
 Every value is overridable by environment variable — see `.env.example`. The
@@ -223,7 +223,7 @@ creation; only its SHA-256 is stored.
 | `POST /api/answer` | Submit one answer; returns correctness, points, explanation and source |
 | `POST /api/player` | Create an account. `?action=recovery-code` / `?action=claim` move it to another device |
 | `GET /api/player` | Your profile and statistics, or `?id=` for a public profile |
-| `GET /api/leaderboard` | The permanent home-screen board: top players by all-time overall score, each broken out by category |
+| `GET /api/leaderboard` | `?day=` (default today, last 5 days only) — top players for that day, each broken out by category |
 | `GET /api/cron/refresh` | Scheduled content generation (requires `CRON_SECRET`) |
 | `GET /api/health` | Used by the frontend on boot to decide whether to show the offline screen |
 
@@ -254,16 +254,26 @@ for everyone until midnight.
 ## Leaderboard
 
 There is one board, permanently visible on the home screen: the top 10 players
-ranked by all-time overall score, each row broken out by category (Current
-Events, Science, Geography, General Knowledge) so a player's strengths are
-visible at a glance. It reads straight from each player's cached stats — no
-periods, no scopes, nothing to filter.
+for **today** (UTC), ranked by points earned that calendar day, each row
+broken out by category (Current Events, Science, Geography, General
+Knowledge) so a player's strengths are visible at a glance. It is computed
+from the `score_events` ledger filtered to that day — not an all-time total —
+so the home board always reflects who's playing well today, not just whoever
+has played the longest.
 
 If the signed-in player is outside the top 10, their own row is appended below
 with their real rank instead of being left off the board, and that row is
 visually distinguished (bold, highlighted) so they can immediately spot
 themselves. There is no friends list and no separate scope — the board is
 global, for everyone.
+
+A "History" link opens a day picker (Today, Yesterday, and the 3 days before
+that) showing the same board for any of those days. `GET /api/leaderboard`
+only accepts a `day` within that rolling 5-day window (`HISTORY_DAYS` in
+`leaderboardService.js`) — anything older is refused with a 400 rather than
+silently returning nothing. This is a query-side limit, not a retention
+policy: `score_events` itself is untouched, since personal weekly/monthly
+stats elsewhere read further back than 5 days.
 
 ## Inviting friends
 
@@ -344,9 +354,8 @@ stops the timer rather than penalising the player.
 - **Feed reachability.** The default news and science feeds are public RSS. Some
   networks and some hosting environments block them; `NEWS_FEEDS` and
   `SCIENCE_FEEDS` exist so you can point at reachable sources.
-- **Flag questions** are not implemented. REST Countries returns flag images, and
-  the play shape currently carries text options only; adding image answers would
-  mean extending that shape.
+- **Flag questions** are not implemented. The play shape currently carries text
+  options only; adding image answers would mean extending that shape.
 - **Timezone.** Every category's day is UTC. A local-timezone daily would mean
   several concurrent boards and a much murkier "once per day" rule.
 - **Rate limits** are per-IP for account creation, which can bite users behind

@@ -548,27 +548,28 @@ async function inviteFriends() {
 }
 
 // ---------------------------------------------------------------------------
-// Leaderboard — permanently visible on home: top 10 by all-time overall
-// score, broken out by category, plus the viewer's own row if they are not
-// already in that top 10.
+// Leaderboard — permanently visible on home: today's top 10, broken out by
+// category, plus the viewer's own row if they are not already in that top
+// 10. A separate History screen browses the last few days the same way.
 // ---------------------------------------------------------------------------
 
 async function renderHomeLeaderboard() {
-  const body = clear(role('home-leaderboard-body'));
-
   const data = await guarded(() => leaderboardService.load({ limit: 10 }), {
-    onError: () => {
-      clear(body).append(leaderboardMessageRow('Could not load the leaderboard.'));
-    },
+    onError: () => renderLeaderboardTable('home-leaderboard-body', null),
   });
-  if (!data) return;
+  renderLeaderboardTable('home-leaderboard-body', data);
+}
 
-  clear(body);
-  if (!data.entries.length) {
-    body.append(leaderboardMessageRow('No scores yet — be the first to play.'));
+function renderLeaderboardTable(bodyRole, data) {
+  const body = clear(role(bodyRole));
+  if (!data) {
+    body.append(leaderboardMessageRow('Could not load the leaderboard.'));
     return;
   }
-
+  if (!data.entries.length) {
+    body.append(leaderboardMessageRow('No scores yet for this day.'));
+    return;
+  }
   for (const entry of data.entries) body.append(leaderboardRow(entry));
   if (data.viewerRow) body.append(leaderboardRow(data.viewerRow));
 }
@@ -591,6 +592,51 @@ function leaderboardMessageRow(text) {
   return el('tr', {}, [
     el('td', { class: 'empty', colspan: String(3 + QUICK_PLAY_CATEGORIES.length), text }),
   ]);
+}
+
+// --- History --------------------------------------------------------------
+
+const historyState = { day: null };
+
+function dayChipLabel(day, index) {
+  if (index === 0) return 'Today';
+  if (index === 1) return 'Yesterday';
+  const [, month, date] = day.split('-');
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${monthNames[Number(month) - 1]} ${Number(date)}`;
+}
+
+async function openLeaderboardHistory() {
+  showScreen('leaderboard-history');
+  const data = await guarded(() => leaderboardService.load({ limit: 10 }), {
+    onError: () => renderLeaderboardTable('history-leaderboard-body', null),
+  });
+  if (!data) return;
+
+  historyState.day = data.day;
+  const chips = clear(role('history-days'));
+  data.availableDays.forEach((day, index) => {
+    chips.append(
+      el('button', {
+        class: `chip chip--small${day === data.day ? ' is-selected' : ''}`,
+        'data-history-day': day,
+        text: dayChipLabel(day, index),
+      }),
+    );
+  });
+
+  renderLeaderboardTable('history-leaderboard-body', data);
+}
+
+async function selectHistoryDay(day) {
+  if (day === historyState.day) return;
+  historyState.day = day;
+  selectWithin(role('history-days'), $(`[data-history-day="${day}"]`));
+
+  const data = await guarded(() => leaderboardService.load({ day, limit: 10 }), {
+    onError: () => renderLeaderboardTable('history-leaderboard-body', null),
+  });
+  if (data) renderLeaderboardTable('history-leaderboard-body', data);
 }
 
 // ---------------------------------------------------------------------------
@@ -637,12 +683,16 @@ async function shareScore() {
 
 function bindEvents() {
   document.addEventListener('click', async (event) => {
-    const target = event.target.closest('[data-action], [data-category]');
+    const target = event.target.closest('[data-action], [data-category], [data-history-day]');
     if (!target) return;
 
     if (target.dataset.category) {
       state.category = target.dataset.category;
       selectWithin(role('category-chips'), target);
+      return;
+    }
+    if (target.dataset.historyDay) {
+      await selectHistoryDay(target.dataset.historyDay);
       return;
     }
 
@@ -676,6 +726,9 @@ function bindEvents() {
         break;
       case 'invite-friend':
         await inviteFriends();
+        break;
+      case 'open-leaderboard-history':
+        await openLeaderboardHistory();
         break;
       case 'open-settings':
         openSettings();
