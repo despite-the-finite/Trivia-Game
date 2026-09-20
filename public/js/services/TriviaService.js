@@ -48,7 +48,6 @@ export class TriviaService {
     this.session = payload.session;
     this.questions = payload.questions ?? [];
     this.scoring = payload.scoring ?? null;
-    this.challenge = payload.challenge ?? null;
 
     // A resumed run tells us what was already answered; skip past those.
     if (Array.isArray(payload.answered) && payload.answered.length) {
@@ -69,11 +68,6 @@ export class TriviaService {
 
   async startDailyChallenge() {
     return this.startCategoryQuiz('mixed');
-  }
-
-  async startChallenge(slug) {
-    const payload = await this.api.post('/challenge', { slug }, { action: 'join' });
-    return this.adopt(payload);
   }
 
   async resume(sessionId) {
@@ -134,8 +128,8 @@ export class TriviaService {
     return this.api.get('/daily-challenge', { category });
   }
 
-  async dailyLeaderboard(scope = 'global', category = 'mixed') {
-    return this.api.get('/daily-challenge', { view: 'leaderboard', scope, category });
+  async dailyLeaderboard(category = 'mixed') {
+    return this.api.get('/daily-challenge', { view: 'leaderboard', category });
   }
 }
 

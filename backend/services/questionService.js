@@ -27,18 +27,21 @@ export async function pickQuestions({
   category = 'mixed',
   count = 10,
   excludeIds = [],
+  difficulty = null,
 } = {}) {
+  if (count <= 0) return [];
   const categories = category === 'mixed' ? CATEGORIES : [category];
-  const params = [categories, count, excludeIds.length ? excludeIds : null];
+  const params = [categories, count, excludeIds.length ? excludeIds : null, difficulty];
 
   const rows = await queryRows(
     `SELECT id, category, question, answers, correct_index, explanation,
-            source, source_url, source_published_at, generated_at, expires_at
+            source, source_url, source_published_at, generated_at, expires_at, difficulty
        FROM questions
       WHERE active
         AND expires_at > NOW()
         AND category = ANY($1)
         AND ($3::uuid[] IS NULL OR NOT (id = ANY($3)))
+        AND ($4::text IS NULL OR difficulty = $4)
       ORDER BY (times_served <= (SELECT COALESCE(MIN(times_served), 0) + 2
                                    FROM questions
                                   WHERE active AND expires_at > NOW() AND category = ANY($1))) DESC,
@@ -50,13 +53,53 @@ export async function pickQuestions({
   return rows;
 }
 
+const DIFFICULTIES = ['easy', 'medium', 'hard'];
+
+/** Splits `count` into DIFFICULTIES.length shares that differ by at most one. */
+function difficultyShares(count) {
+  const base = Math.floor(count / DIFFICULTIES.length);
+  const remainder = count % DIFFICULTIES.length;
+  return DIFFICULTIES.map((_, i) => base + (i < remainder ? 1 : 0));
+}
+
 /**
- * Builds a balanced mixed set: for `mixed` we want an even spread across
- * categories rather than whatever the bank happens to be heaviest in.
+ * Picks `count` questions from one category with a roughly even spread across
+ * easy/medium/hard, so a day's quiz never reads as uniformly difficult. Falls
+ * back to any difficulty to top up a tier that is running short.
+ */
+async function pickDifficultyBalanced({ category, count, excludeIds = [] }) {
+  const used = new Set(excludeIds);
+  const collected = [];
+  const shares = difficultyShares(count);
+
+  for (const [i, difficulty] of shuffle(DIFFICULTIES).entries()) {
+    const rows = await pickQuestions({ category, count: shares[i], excludeIds: [...used], difficulty });
+    for (const row of rows) {
+      used.add(row.id);
+      collected.push(row);
+    }
+  }
+
+  if (collected.length < count) {
+    const filler = await pickQuestions({
+      category,
+      count: count - collected.length,
+      excludeIds: [...used],
+    });
+    collected.push(...filler);
+  }
+
+  return shuffle(collected).slice(0, count);
+}
+
+/**
+ * Builds a balanced set: for `mixed` we want an even spread across categories
+ * rather than whatever the bank happens to be heaviest in, and within every
+ * category (mixed or not) an even spread across difficulty.
  */
 export async function pickBalancedSet({ category, count, excludeIds = [] }) {
   if (category !== 'mixed') {
-    return pickQuestions({ category, count, excludeIds });
+    return pickDifficultyBalanced({ category, count, excludeIds });
   }
 
   const perCategory = Math.ceil(count / CATEGORIES.length);
@@ -64,7 +107,7 @@ export async function pickBalancedSet({ category, count, excludeIds = [] }) {
   const used = new Set(excludeIds);
 
   for (const cat of shuffle(CATEGORIES)) {
-    const rows = await pickQuestions({
+    const rows = await pickDifficultyBalanced({
       category: cat,
       count: perCategory,
       excludeIds: [...used],
@@ -105,8 +148,8 @@ export async function getQuestionsByIds(ids) {
  * Produces a permutation per question mapping display position -> canonical
  * index. Storing the permutation (rather than the shuffled answers) means the
  * same question can be presented in a different order to different players
- * while the stored correct index stays authoritative — and lets a challenge
- * replay the exact same ordering for both participants.
+ * while the stored correct index stays authoritative — and lets a day's fixed
+ * quiz replay the exact same ordering for everyone who plays it.
  */
 export function buildAnswerOrders(questions, rng = Math.random) {
   const orders = {};

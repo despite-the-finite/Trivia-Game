@@ -26,7 +26,12 @@ Absolute rules:
 7. Avoid anything opinion-based, speculative, rumoured, predictive, or a politically contested interpretation. Prefer who/what/where/how-many facts that were reported as settled.
 8. Never use "all of the above", "none of the above", or similar meta-options.
 9. Set sourceId to the id of the single document the question came from.
-10. The explanation is one or two sentences stating the fact plainly, without referring to the source document as a document.`;
+10. The explanation is one or two sentences stating the fact plainly, without referring to the source document as a document.
+11. Set difficulty to "easy", "medium" or "hard", based only on how well-known or precise the fact is:
+    - easy: the headline fact itself (who, what, where in broad terms).
+    - medium: a specific but clearly stated detail (a number, a date, a named person or place mentioned once).
+    - hard: a precise or easy-to-overlook detail (an exact figure, a minor named entity, a secondary fact).
+    Difficulty must never come from ambiguity, trick wording or obscure phrasing — every question stays clearly answerable from the source regardless of its difficulty. Aim for a roughly even mix of the three across the batch.`;
 
 const QUESTION_SCHEMA = {
   type: 'object',
@@ -38,18 +43,21 @@ const QUESTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['sourceId', 'question', 'answers', 'correctAnswer', 'explanation'],
+        required: ['sourceId', 'question', 'answers', 'correctAnswer', 'explanation', 'difficulty'],
         properties: {
           sourceId: { type: 'integer' },
           question: { type: 'string' },
           answers: { type: 'array', items: { type: 'string' } },
           correctAnswer: { type: 'string' },
           explanation: { type: 'string' },
+          difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
         },
       },
     },
   },
 };
+
+const VALID_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 
 function renderDocuments(documents) {
   return documents
@@ -93,6 +101,7 @@ export async function generateFromDocuments(
   const prompt = [
     `Category: ${label}`,
     `Write up to ${count} questions total, at most 2 per source document.`,
+    'Aim for roughly a third easy, a third medium and a third hard (see the difficulty rule above).',
     '',
     renderDocuments(documents),
     '',
@@ -119,6 +128,7 @@ export async function generateFromDocuments(
       return {
         ...q,
         category,
+        difficulty: VALID_DIFFICULTIES.has(q.difficulty) ? q.difficulty : 'medium',
         source: doc.sourceName,
         sourceUrl: doc.url,
         sourcePublishedAt: doc.publishedAt,
@@ -254,6 +264,7 @@ export async function generateGeography(documents, { count, seenFingerprints, rn
       answers: [t.correctAnswer, ...t.distractors],
       correctAnswer: t.correctAnswer,
       explanation: t.explanation,
+      difficulty: t.difficulty,
       source: doc.sourceName,
       sourceUrl: doc.url,
       sourcePublishedAt: doc.publishedAt,

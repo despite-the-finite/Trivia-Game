@@ -2,9 +2,7 @@ import { api, ApiError } from './services/ApiClient.js';
 import { playerService } from './services/PlayerService.js';
 import { triviaService } from './services/TriviaService.js';
 import { leaderboardService } from './services/LeaderboardService.js';
-import { challengeService, ChallengeService } from './services/ChallengeService.js';
 import { ShareService } from './services/ShareService.js';
-import { sound } from './sound.js';
 import {
   $, $$, role, setText, show, el, clear,
   formatNumber, formatSeconds, initials, toast, animateNumber, CATEGORY_LABELS,
@@ -20,7 +18,6 @@ import {
 const state = {
   screen: 'boot',
   category: 'current-events',
-  pendingChallengeSlug: null,
   lastSummary: null,
   timer: null,
   questionDeadline: 0,
@@ -82,7 +79,6 @@ async function guarded(fn, { onError } = {}) {
 
 async function boot() {
   showScreen('boot');
-  state.pendingChallengeSlug = ChallengeService.slugFromLocation();
 
   try {
     const health = await api.health();
@@ -106,15 +102,8 @@ async function boot() {
   await enterApp();
 }
 
-/** Post-sign-in routing: honour a challenge link, otherwise go home. */
+/** Post-sign-in routing: honour a direct link to the daily quiz, otherwise go home. */
 async function enterApp() {
-  if (state.pendingChallengeSlug) {
-    const slug = state.pendingChallengeSlug;
-    state.pendingChallengeSlug = null;
-    await openChallenge(slug);
-    return;
-  }
-
   if (window.location.pathname === '/daily') {
     await renderHome();
     await startDaily();
@@ -134,7 +123,6 @@ async function renderHome() {
   if (!player) return;
 
   setText('home-name', player.displayName);
-  setText('home-code', player.friendCode);
   const avatar = role('home-avatar');
   if (avatar) avatar.textContent = initials(player.displayName);
 
@@ -149,6 +137,24 @@ async function renderHome() {
   guarded(async () => {
     const daily = await triviaService.dailyStatus();
     renderDailyCard(daily);
+  });
+
+  guarded(() => renderCategoryCompletion());
+
+  guarded(() => renderHomeLeaderboard());
+}
+
+/** Quick-play categories (everything except the combined 'mixed' Daily Challenge). */
+const QUICK_PLAY_CATEGORIES = Object.keys(CATEGORY_LABELS).filter((c) => c !== 'mixed');
+
+/** Ticks off each category chip whose quiz the player has already completed today. */
+async function renderCategoryCompletion() {
+  const statuses = await Promise.all(
+    QUICK_PLAY_CATEGORIES.map((category) => triviaService.dailyStatus(category)),
+  );
+  QUICK_PLAY_CATEGORIES.forEach((category, i) => {
+    const chip = $(`[data-category="${category}"]`);
+    if (chip) chip.classList.toggle('is-complete', Boolean(statuses[i].played));
   });
 }
 
@@ -212,7 +218,6 @@ function startTimer(limitMs) {
   stopTimer();
   const fill = role('timer-fill');
   state.questionDeadline = performance.now() + limitMs;
-  let lastTickSecond = Math.ceil(limitMs / 1000);
 
   const frame = () => {
     const remaining = state.questionDeadline - performance.now();
@@ -220,12 +225,6 @@ function startTimer(limitMs) {
     if (fill) {
       fill.style.transform = `scaleX(${ratio})`;
       fill.classList.toggle('is-low', ratio < 0.3);
-    }
-
-    const second = Math.ceil(remaining / 1000);
-    if (second !== lastTickSecond && second <= 5 && second > 0) {
-      lastTickSecond = second;
-      sound.tick();
     }
 
     if (remaining <= 0) {
@@ -292,7 +291,6 @@ async function handleAnswer(selectedIndex) {
   if (state.awaitingNext) return;
   state.awaitingNext = true;
   stopTimer();
-  sound.tap();
 
   const buttons = $$('.answer');
   for (const button of buttons) button.disabled = true;
@@ -316,13 +314,6 @@ async function handleAnswer(selectedIndex) {
     else if (index === selectedIndex) button.classList.add('is-wrong');
     else button.classList.add('is-dimmed');
   });
-
-  if (result.correct) {
-    if (result.streak >= 3) sound.streak();
-    else sound.correct();
-  } else {
-    sound.wrong();
-  }
 
   const scorePill = $('.scorepill');
   setText('game-score', formatNumber(triviaService.score));
@@ -381,14 +372,12 @@ function advance() {
 
 async function finishGame() {
   stopTimer();
-  sound.finish();
 
   const summary = await guarded(() => triviaService.finish());
   if (!summary) return;
 
   state.lastSummary = summary;
   renderResults(summary);
-  leaderboardService.invalidate();
 }
 
 // ---------------------------------------------------------------------------
@@ -404,23 +393,6 @@ function renderResults(summary) {
   setText('result-accuracy', `${result.accuracy}%`);
   setText('result-streak', formatNumber(result.bestStreak));
   setText('result-speed', formatSeconds(result.averageResponseMs));
-
-  const comparison = role('result-comparison');
-  if (comparison) {
-    if (summary.comparison) {
-      const { rank, of, playerAhead } = summary.comparison;
-      const lines = [`#${rank} of ${of} among your friends this week`];
-      if (playerAhead && playerAhead.gap > 0) {
-        lines.push(
-          `${playerAhead.displayName} is ${formatNumber(playerAhead.gap)} points ahead of you`,
-        );
-      }
-      comparison.textContent = lines.join(' · ');
-      comparison.hidden = false;
-    } else {
-      comparison.hidden = true;
-    }
-  }
 
   show(role('review'), false);
   clear(role('review'));
@@ -473,7 +445,6 @@ async function renderReview() {
 // ---------------------------------------------------------------------------
 
 async function startCategoryQuiz() {
-  sound.unlock();
   showScreen('boot');
   const started = await guarded(() => triviaService.startCategoryQuiz(state.category), {
     onError: (err) => {
@@ -490,7 +461,6 @@ async function startCategoryQuiz() {
 }
 
 async function startDaily() {
-  sound.unlock();
   const status = await guarded(() => triviaService.dailyStatus());
   if (!status) return;
 
@@ -512,11 +482,11 @@ async function startDaily() {
 }
 
 async function openDailyBoard(status) {
-  const data = await guarded(() => triviaService.dailyLeaderboard('global'));
+  const data = await guarded(() => triviaService.dailyLeaderboard());
   if (!data) return;
 
-  showScreen('challenge');
-  const panel = clear(role('challenge-panel'));
+  showScreen('daily-board');
+  const panel = clear(role('daily-board-panel'));
   panel.append(
     el('h2', { class: 'panel__title', text: `Daily Challenge · ${status.day}` }),
     el('p', {
@@ -564,222 +534,63 @@ async function shareDaily(status) {
 }
 
 // ---------------------------------------------------------------------------
-// Challenges
+// Inviting friends
 // ---------------------------------------------------------------------------
 
-async function openChallenge(slug) {
-  const data = await guarded(() => challengeService.results(slug));
-  if (!data) return;
-
-  showScreen('challenge');
-  const panel = clear(role('challenge-panel'));
-  const you = data.participants.find((p) => p.isViewer);
-
-  panel.append(
-    el('h2', { class: 'panel__title', text: 'Head-to-head' }),
-    el('p', {
-      class: 'panel__body',
-      text: `${data.challenge.questionCount} questions · ${CATEGORY_LABELS[data.challenge.category] ?? data.challenge.category}. Both players get the same set in the same order.`,
-    }),
-  );
-
-  if (data.participants.some((p) => p.completed)) {
-    if (data.outcome?.headline) {
-      panel.append(el('p', { class: 'vs__verdict', text: data.outcome.headline }));
-    }
-    const rows = el('div', { class: 'vs' });
-    for (const p of data.participants) {
-      rows.append(
-        el(
-          'div',
-          {
-            class: `vs__row${data.outcome?.winnerId === p.playerId ? ' is-winner' : ''}${
-              p.completed ? '' : ' is-pending'
-            }`,
-          },
-          [
-            el('span', { class: 'vs__name' }, [
-              document.createTextNode(p.displayName + (p.isViewer ? ' (you)' : '')),
-              el('span', {
-                class: 'vs__meta',
-                text: p.completed
-                  ? `${p.correct}/${p.total} correct · ${p.accuracy}% · ${formatSeconds(p.totalResponseMs)} total`
-                  : 'Has not played yet',
-              }),
-            ]),
-            el('span', { class: 'vs__score', text: p.completed ? formatNumber(p.score) : '—' }),
-          ],
-        ),
-      );
-    }
-    panel.append(rows);
-  }
-
-  if (!you || !you.completed) {
-    panel.append(
-      el('button', {
-        class: 'btn btn--primary btn--block',
-        text: you ? 'CONTINUE THE CHALLENGE' : 'ACCEPT THE CHALLENGE',
-        onClick: () => playChallenge(slug),
-      }),
-    );
-  }
-
-  panel.append(
-    el('button', {
-      class: 'btn btn--secondary btn--block',
-      text: 'SHARE THIS CHALLENGE',
-      onClick: async () => {
-        const outcome = await ShareService.share({
-          text: data.shareText ?? ShareService.challengeInviteText(playerService.player?.displayName ?? 'A friend'),
-          url: data.challenge.url,
-        });
-        if (outcome === 'copied') toast('Link copied.');
-      },
-    }),
-    el('button', {
-      class: 'btn btn--ghost btn--block',
-      text: 'BACK TO HOME',
-      onClick: () => {
-        history.pushState({}, '', '/');
-        renderHome();
-      },
-    }),
-  );
-}
-
-async function playChallenge(slug) {
-  sound.unlock();
-  showScreen('boot');
-  const started = await guarded(() => triviaService.startChallenge(slug), {
-    onError: (err) => {
-      toast(err.message);
-      openChallenge(slug);
-    },
-  });
-  if (!started) return;
-  showScreen('game');
-  renderQuestion();
-}
-
-async function createChallenge() {
-  const created = await guarded(() => challengeService.create({ category: state.category }));
-  if (!created) return;
-
+/** No head-to-head matchmaking — just hand out a link to come play. */
+async function inviteFriends() {
   const outcome = await ShareService.share({
-    text: created.shareText,
-    url: created.url,
+    text: ShareService.inviteText(playerService.player?.displayName ?? 'A friend'),
+    url: window.location.origin,
   });
-  if (outcome === 'copied') toast('Challenge link copied — send it to a friend.');
-  else if (outcome === 'failed') toast(created.url);
-
-  await openChallenge(created.challenge.slug);
+  if (outcome === 'copied') toast('Link copied — send it to a friend.');
+  if (outcome === 'failed') toast('Could not share on this device.');
 }
 
 // ---------------------------------------------------------------------------
-// Leaderboard
+// Leaderboard — permanently visible on home: top 10 by all-time overall
+// score, broken out by category, plus the viewer's own row if they are not
+// already in that top 10.
 // ---------------------------------------------------------------------------
 
-async function openLeaderboard() {
-  showScreen('leaderboard');
-  await renderLeaderboard();
-}
+async function renderHomeLeaderboard() {
+  const body = clear(role('home-leaderboard-body'));
 
-async function renderLeaderboard() {
-  const list = clear(role('lb-list'));
-  list.append(el('li', { class: 'empty', text: 'Loading…' }));
-
-  const data = await guarded(() => leaderboardService.load(), {
-    onError: (err) => {
-      clear(list).append(el('li', { class: 'empty', text: err.message }));
+  const data = await guarded(() => leaderboardService.load({ limit: 10 }), {
+    onError: () => {
+      clear(body).append(leaderboardMessageRow('Could not load the leaderboard.'));
     },
   });
   if (!data) return;
 
-  clear(list);
+  clear(body);
   if (!data.entries.length) {
-    list.append(
-      el('li', {
-        class: 'empty',
-        text:
-          data.scope === 'friends'
-            ? 'Add a friend to see how you compare.'
-            : 'No scores in this period yet — be the first.',
-      }),
-    );
+    body.append(leaderboardMessageRow('No scores yet — be the first to play.'));
     return;
   }
 
-  const unitSuffix = data.unit === 'percent' ? '%' : '';
-  for (const entry of data.entries) {
-    list.append(
-      el('li', { class: `board__row${entry.isViewer ? ' is-you' : ''}` }, [
-        el('span', { class: 'board__rank', text: `${entry.rank}` }),
-        el('span', { class: 'board__name' }, [
-          el('div', { text: entry.displayName }),
-          entry.questionsAnswered
-            ? el('div', {
-                class: 'board__meta',
-                text:
-                  data.unit === 'points'
-                    ? `${entry.accuracy}% accuracy · ${formatNumber(entry.questionsAnswered)} answered`
-                    : `${formatNumber(entry.questionsAnswered)} answered`,
-              })
-            : null,
-        ]),
-        el('span', { class: 'board__value', text: `${formatNumber(entry.value)}${unitSuffix}` }),
-      ]),
-    );
-  }
+  for (const entry of data.entries) body.append(leaderboardRow(entry));
+  if (data.viewerRow) body.append(leaderboardRow(data.viewerRow));
 }
 
-// ---------------------------------------------------------------------------
-// Friends
-// ---------------------------------------------------------------------------
-
-async function openFriends() {
-  showScreen('friends');
-  setText('friends-own-code', playerService.player?.friendCode ?? '');
-  await renderFriends();
-}
-
-async function renderFriends() {
-  const list = clear(role('friends-list'));
-  const friends = await guarded(() => playerService.listFriends());
-  if (!friends) return;
-
-  if (!friends.length) {
-    list.append(
-      el('li', {
-        class: 'empty',
-        text: 'No friends yet. Share your code, or add someone by theirs.',
+function leaderboardRow(entry) {
+  return el('tr', { class: entry.isViewer ? 'is-you' : undefined }, [
+    el('td', { class: 'lbmatrix__rank', text: `#${entry.rank}` }),
+    el('td', { class: 'lbmatrix__name', text: entry.displayName }),
+    el('td', { class: 'lbmatrix__score', text: formatNumber(entry.totalScore) }),
+    ...QUICK_PLAY_CATEGORIES.map((category) =>
+      el('td', {
+        class: 'lbmatrix__cat',
+        text: formatNumber(entry.categoryScores[category] ?? 0),
       }),
-    );
-    return;
-  }
+    ),
+  ]);
+}
 
-  for (const friend of friends) {
-    list.append(
-      el('li', { class: 'friend' }, [
-        el('span', { class: 'friend__name', text: friend.displayName }),
-        el('button', {
-          class: 'linkbtn',
-          text: 'remove',
-          onClick: async () => {
-            await guarded(() => playerService.removeFriend(friend.id));
-            await renderFriends();
-            leaderboardService.invalidate();
-          },
-        }),
-        el('span', { class: 'friend__stats' }, [
-          el('span', {}, [document.createTextNode('Week '), el('b', { text: formatNumber(friend.weeklyScore) })]),
-          el('span', {}, [document.createTextNode('All time '), el('b', { text: formatNumber(friend.allTimeScore) })]),
-          el('span', {}, [document.createTextNode('Accuracy '), el('b', { text: `${friend.accuracy}%` })]),
-          el('span', {}, [document.createTextNode('Best streak '), el('b', { text: formatNumber(friend.bestStreak) })]),
-        ]),
-      ]),
-    );
-  }
+function leaderboardMessageRow(text) {
+  return el('tr', {}, [
+    el('td', { class: 'empty', colspan: String(3 + QUICK_PLAY_CATEGORIES.length), text }),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -790,8 +601,6 @@ function openSettings() {
   showScreen('settings');
   const input = $('[data-role="rename-form"] input[name="displayName"]');
   if (input) input.value = playerService.player?.displayName ?? '';
-  const toggle = $('[data-action="toggle-sound"]');
-  if (toggle) toggle.checked = sound.enabled;
   show(role('recovery-code'), false);
 }
 
@@ -817,11 +626,7 @@ async function shareScore() {
           mode: summary.session.mode,
         });
 
-  const url = summary.session.challengeId
-    ? `${window.location.origin}/challenge/${summary.session.challengeId}`
-    : window.location.origin;
-
-  const outcome = await ShareService.share({ text, url });
+  const outcome = await ShareService.share({ text, url: window.location.origin });
   if (outcome === 'copied') toast('Copied — paste it anywhere.');
   if (outcome === 'failed') toast('Could not share on this device.');
 }
@@ -831,35 +636,13 @@ async function shareScore() {
 // ---------------------------------------------------------------------------
 
 function bindEvents() {
-  // Unlock audio on the first gesture anywhere.
-  document.addEventListener('pointerdown', () => sound.unlock(), { once: true });
-
   document.addEventListener('click', async (event) => {
-    const target = event.target.closest('[data-action], [data-category], [data-scope], [data-period], [data-board]');
+    const target = event.target.closest('[data-action], [data-category]');
     if (!target) return;
 
-    // Filter chips / segmented controls
     if (target.dataset.category) {
       state.category = target.dataset.category;
       selectWithin(role('category-chips'), target);
-      return;
-    }
-    if (target.dataset.scope) {
-      leaderboardService.setFilter('scope', target.dataset.scope);
-      selectWithin(role('lb-scope'), target);
-      await renderLeaderboard();
-      return;
-    }
-    if (target.dataset.period) {
-      leaderboardService.setFilter('period', target.dataset.period);
-      selectWithin(role('lb-period'), target);
-      await renderLeaderboard();
-      return;
-    }
-    if (target.dataset.board) {
-      leaderboardService.setFilter('board', target.dataset.board);
-      selectWithin(role('lb-board'), target);
-      await renderLeaderboard();
       return;
     }
 
@@ -891,17 +674,8 @@ function bindEvents() {
       case 'play-again':
         await startCategoryQuiz();
         break;
-      case 'challenge-friend':
-        await createChallenge();
-        break;
-      case 'create-challenge':
-        await createChallenge();
-        break;
-      case 'open-leaderboard':
-        await openLeaderboard();
-        break;
-      case 'open-friends':
-        await openFriends();
+      case 'invite-friend':
+        await inviteFriends();
         break;
       case 'open-settings':
         openSettings();
@@ -915,20 +689,6 @@ function bindEvents() {
       case 'review-answers':
         await renderReview();
         break;
-      case 'copy-friend-code': {
-        const outcome = await ShareService.copy(playerService.player?.friendCode ?? '');
-        toast(outcome === 'copied' ? 'Friend code copied.' : 'Could not copy.');
-        break;
-      }
-      case 'share-friend-code': {
-        const player = playerService.player;
-        const outcome = await ShareService.share({
-          text: ShareService.friendCodeText(player.displayName, player.friendCode),
-          url: window.location.origin,
-        });
-        if (outcome === 'copied') toast('Copied — send it to a friend.');
-        break;
-      }
       case 'get-recovery-code': {
         const data = await guarded(() => playerService.requestRecoveryCode());
         if (!data) break;
@@ -942,13 +702,6 @@ function bindEvents() {
       }
       default:
         break;
-    }
-  });
-
-  document.addEventListener('change', (event) => {
-    if (event.target.matches('[data-action="toggle-sound"]')) {
-      sound.setEnabled(event.target.checked);
-      if (event.target.checked) sound.correct();
     }
   });
 
@@ -982,28 +735,6 @@ function bindEvents() {
       },
     );
     if (restored) await enterApp();
-  });
-
-  // Friends
-  role('add-friend-form')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const errorNode = role('friends-error');
-    show(errorNode, false);
-    const added = await guarded(
-      () => playerService.addFriend(event.target.elements.friendCode.value),
-      {
-        onError: (err) => {
-          errorNode.textContent = err.message;
-          show(errorNode, true);
-        },
-      },
-    );
-    if (added) {
-      event.target.reset();
-      toast(`${added.added.displayName} added.`);
-      leaderboardService.invalidate();
-      await renderFriends();
-    }
   });
 
   // Settings
@@ -1051,9 +782,7 @@ function bindEvents() {
   });
 
   window.addEventListener('popstate', () => {
-    const slug = ChallengeService.slugFromLocation();
-    if (slug) openChallenge(slug);
-    else renderHome();
+    renderHome();
   });
 
   window.addEventListener('offline', () => {

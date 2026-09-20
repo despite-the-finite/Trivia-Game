@@ -316,12 +316,6 @@ button {
   padding: 8px 14px;
   font-size: 13px;
 }
-.btnrow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 12px;
-}
 .linkbtn {
   background: none;
   border: 0;
@@ -384,13 +378,6 @@ button {
   font-size: 13px;
   margin: 6px 0 0;
 }
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 15px;
-}
-
 /* --- Top bar -------------------------------------------------------------- */
 
 .topbar {
@@ -423,14 +410,6 @@ button {
   margin: 0;
   font-weight: 700;
   font-size: 17px;
-}
-.topbar__code {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-faint);
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 .avatar {
   width: 42px;
@@ -544,24 +523,86 @@ button {
   color: var(--accent-strong);
   font-weight: 600;
 }
-
-.navgrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+.chip.is-complete {
+  border-color: var(--correct);
 }
-.navbtn {
-  background: var(--bg-elevated);
+.chip.is-complete::after {
+  content: '✓';
+  margin-left: 6px;
+  color: var(--correct);
+  font-weight: 700;
+}
+.chip.is-complete.is-selected {
+  background: var(--correct-soft);
+  color: var(--correct);
+}
+
+.lbmatrix-scroll {
+  overflow-x: auto;
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-sm);
-  padding: 14px 6px;
-  font-size: 13px;
-  display: grid;
-  gap: 6px;
-  justify-items: center;
+  background: var(--bg-elevated);
 }
-.navbtn span {
-  font-size: 20px;
+.lbmatrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.lbmatrix th,
+.lbmatrix td {
+  padding: 10px 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+.lbmatrix th:first-child,
+.lbmatrix td:first-child,
+.lbmatrix th:nth-child(2),
+.lbmatrix td:nth-child(2) {
+  text-align: left;
+}
+.lbmatrix thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  font-weight: 700;
+  border-bottom: 1px solid var(--surface-border);
+}
+.lbmatrix tbody tr + tr {
+  border-top: 1px solid var(--surface-border);
+}
+.lbmatrix__rank {
+  color: var(--text-faint);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.lbmatrix__name {
+  font-weight: 600;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lbmatrix__score,
+.lbmatrix__cat {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.lbmatrix__score {
+  color: var(--text);
+  font-weight: 700;
+}
+.lbmatrix tr.is-you {
+  background: var(--accent-soft);
+}
+.lbmatrix tr.is-you td {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+.lbmatrix .empty {
+  text-align: center;
+  color: var(--text-faint);
+  padding: 18px 12px;
+  white-space: normal;
 }
 
 /* --- Game ----------------------------------------------------------------- */
@@ -833,14 +874,6 @@ button {
   font-size: 12px;
   color: var(--text-faint);
 }
-.results__comparison {
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  font-size: 14px;
-  margin: 0 0 18px;
-}
 .results__actions {
   text-align: left;
 }
@@ -876,39 +909,7 @@ button {
   color: var(--text-faint);
 }
 
-/* --- Leaderboard ---------------------------------------------------------- */
-
-.filters {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.segmented {
-  display: flex;
-  background: var(--bg-elevated);
-  border: 1px solid var(--surface-border);
-  border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
-}
-.segmented button {
-  flex: 1;
-  background: none;
-  border: 0;
-  border-radius: 999px;
-  padding: 9px 8px;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-.segmented--small button {
-  padding: 7px 6px;
-  font-size: 13px;
-}
-.segmented button.is-selected {
-  background: var(--accent);
-  color: #fff;
-  font-weight: 700;
-}
+/* --- Today's board --------------------------------------------------------- */
 
 .board {
   list-style: none;
@@ -957,41 +958,6 @@ button {
   flex: none;
 }
 
-/* --- Friends -------------------------------------------------------------- */
-
-.friendlist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.friend {
-  background: var(--bg-elevated);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-sm);
-  padding: 13px 15px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 12px;
-  align-items: center;
-}
-.friend__name {
-  font-weight: 700;
-}
-.friend__stats {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-.friend__stats b {
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.08em;
@@ -1005,51 +971,6 @@ button {
   padding: 14px;
   margin-top: 12px;
   font-size: 19px;
-}
-
-/* --- Challenge results ---------------------------------------------------- */
-
-.vs {
-  display: grid;
-  gap: 10px;
-  margin: 16px 0;
-}
-.vs__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  background: var(--bg-raised);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-}
-.vs__row.is-winner {
-  background: var(--correct-soft);
-  border: 1px solid var(--correct);
-}
-.vs__row.is-pending {
-  opacity: 0.6;
-}
-.vs__name {
-  font-weight: 700;
-  font-size: 17px;
-}
-.vs__score {
-  font-size: 22px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-.vs__meta {
-  font-size: 12px;
-  color: var(--text-faint);
-  display: block;
-  font-weight: 400;
-}
-.vs__verdict {
-  text-align: center;
-  font-weight: 700;
-  color: var(--gold);
-  margin: 0 0 4px;
 }
 
 /* --- Toast ---------------------------------------------------------------- */

@@ -10,9 +10,9 @@ import { applyAnswerToStats, applyGameCompletion } from './playerService.js';
  * sessionService — owns a run of questions from start to results.
  *
  * A session pins its question ids and its answer ordering at creation time.
- * That is what makes a challenge fair (both players get an identical set in an
- * identical order) and what makes answer validation possible without trusting
- * anything the client sends beyond a question id and a chosen position.
+ * That is what makes every player's day's quiz identical, and what makes
+ * answer validation possible without trusting anything the client sends
+ * beyond a question id and a chosen position.
  */
 
 export function normalizeCategory(value) {
@@ -32,10 +32,10 @@ export function normalizeCount(value, fallback = GAME.defaultQuestionCount) {
 }
 
 /**
- * Creates a session bound to a fixed question set — used by challenges and by
- * every category's daily quiz, where the ordering must match for everyone.
+ * Creates a session bound to a fixed question set — used by every category's
+ * daily quiz, where the ordering must match for everyone.
  */
-export async function createFixedSession(player, { mode, questionIds, answerOrders, category, challengeId = null, dailyDate = null, isPractice = false }) {
+export async function createFixedSession(player, { mode, questionIds, answerOrders, category, dailyDate = null, isPractice = false }) {
   const questions = await getQuestionsByIds(questionIds);
   if (questions.length !== questionIds.length) {
     throw conflict('Some questions in this set are no longer available.');
@@ -43,8 +43,8 @@ export async function createFixedSession(player, { mode, questionIds, answerOrde
 
   const session = await queryOne(
     `INSERT INTO game_sessions
-       (player_id, mode, category, question_ids, answer_orders, challenge_id, daily_date, is_practice, expires_at)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, NOW() + ($9 || ' milliseconds')::interval)
+       (player_id, mode, category, question_ids, answer_orders, daily_date, is_practice, expires_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NOW() + ($8 || ' milliseconds')::interval)
      RETURNING *`,
     [
       player.id,
@@ -52,7 +52,6 @@ export async function createFixedSession(player, { mode, questionIds, answerOrde
       category,
       questionIds,
       JSON.stringify(answerOrders),
-      challengeId,
       dailyDate,
       isPractice,
       String(GAME.sessionTtlMs),
@@ -72,7 +71,6 @@ export function shapeSessionForPlay(session, questions) {
       mode: session.mode,
       category: session.category,
       isPractice: session.is_practice,
-      challengeId: session.challenge_id,
       dailyDate: session.daily_date,
       questionCount: session.question_ids.length,
       startedAt: session.started_at,
@@ -256,10 +254,7 @@ export async function submitAnswer(player, { sessionId, questionId, selectedInde
   };
 }
 
-/**
- * Finalises a run and returns the end-of-game summary, including where the
- * player landed among their friends this week.
- */
+/** Finalises a run and returns the end-of-game summary. */
 export async function finishSession(player, sessionId) {
   const session = await getSession(sessionId, player.id);
 
@@ -290,23 +285,6 @@ export async function finishSession(player, sessionId) {
           isDaily: session.mode === 'daily',
         });
       }
-
-      if (session.challenge_id) {
-        await client.query(
-          `UPDATE challenge_participants
-              SET score = $3, correct_count = $4,
-                  total_response_ms = $5, completed_at = NOW(), session_id = $2
-            WHERE challenge_id = $1 AND player_id = $6`,
-          [
-            session.challenge_id,
-            sessionId,
-            totalScore,
-            correctCount,
-            answers.reduce((sum, a) => sum + a.response_ms, 0),
-            player.id,
-          ],
-        );
-      }
     });
 
     session.completed_at = new Date();
@@ -318,13 +296,11 @@ export async function finishSession(player, sessionId) {
   return buildSummary(player, session, answers);
 }
 
-async function buildSummary(player, session, answers) {
+function buildSummary(player, session, answers) {
   const totalResponseMs = answers.reduce((sum, a) => sum + a.response_ms, 0);
   const accuracy = answers.length
     ? Math.round((answers.filter((a) => a.correct).length / answers.length) * 1000) / 10
     : 0;
-
-  const comparison = await friendComparison(player.id);
 
   return {
     session: {
@@ -332,7 +308,6 @@ async function buildSummary(player, session, answers) {
       mode: session.mode,
       category: session.category,
       isPractice: session.is_practice,
-      challengeId: session.challenge_id,
       dailyDate: session.daily_date,
       completedAt: session.completed_at,
     },
@@ -346,45 +321,6 @@ async function buildSummary(player, session, answers) {
       averageResponseMs: answers.length ? Math.round(totalResponseMs / answers.length) : 0,
       totalResponseMs,
     },
-    comparison,
-  };
-}
-
-/**
- * "#2 among your friends this week / Alex is 320 points ahead of you".
- * Returns null when the player has no friends yet, so the UI can hide the row.
- */
-export async function friendComparison(playerId) {
-  const rows = await queryRows(
-    `WITH circle AS (
-        SELECT friend_id AS id FROM friendships WHERE player_id = $1
-        UNION SELECT $1
-     )
-     SELECT p.id, p.display_name,
-            COALESCE(SUM(e.points) FILTER (WHERE e.created_at >= date_trunc('week', NOW())), 0)::int AS weekly
-       FROM circle c
-       JOIN players p ON p.id = c.id
-       LEFT JOIN score_events e ON e.player_id = p.id
-      GROUP BY p.id, p.display_name
-      ORDER BY weekly DESC, p.display_name ASC`,
-    [playerId],
-  );
-
-  if (rows.length <= 1) return null;
-
-  const index = rows.findIndex((r) => r.id === playerId);
-  const me = rows[index];
-  const ahead = index > 0 ? rows[index - 1] : null;
-
-  return {
-    scope: 'friends',
-    period: 'week',
-    rank: index + 1,
-    of: rows.length,
-    weeklyScore: me.weekly,
-    playerAhead: ahead
-      ? { displayName: ahead.display_name, weeklyScore: ahead.weekly, gap: ahead.weekly - me.weekly }
-      : null,
   };
 }
 

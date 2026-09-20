@@ -19,7 +19,7 @@ export function extractToken(req) {
 export async function findPlayerByToken(token) {
   if (!token) return null;
   const player = await queryOne(
-    `SELECT id, display_name, friend_code, email, is_anonymous, created_at
+    `SELECT id, display_name, email, is_anonymous, created_at
        FROM players
       WHERE token_hash = $1`,
     [sha256(token)],

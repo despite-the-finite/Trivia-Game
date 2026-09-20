@@ -6,7 +6,7 @@ import {
   withStatus,
   clientIp,
 } from '../backend/lib/http.js';
-import { requirePlayer, optionalPlayer } from '../backend/lib/auth.js';
+import { requirePlayer } from '../backend/lib/auth.js';
 import { enforceRateLimit } from '../backend/lib/rateLimit.js';
 import { isUuid } from '../backend/lib/ids.js';
 import { LIMITS } from '../backend/lib/config.js';
@@ -37,8 +37,7 @@ export default createHandler({
     const q = getQuery(req);
     if (q.id) {
       if (!isUuid(q.id)) throw badRequest('id must be a player UUID.');
-      const viewer = await optionalPlayer(req);
-      return getPublicProfile(q.id, viewer?.id ?? null);
+      return getPublicProfile(q.id);
     }
 
     const player = await requirePlayer(req);
@@ -46,7 +45,6 @@ export default createHandler({
       player: {
         id: player.id,
         displayName: player.display_name,
-        friendCode: player.friend_code,
         isAnonymous: player.is_anonymous,
         createdAt: player.created_at,
       },

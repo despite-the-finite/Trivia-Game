@@ -69,23 +69,6 @@ export class PlayerService {
     return this.stats;
   }
 
-  // --- Friends -----------------------------------------------------------
-
-  async listFriends() {
-    const data = await this.api.get('/friends');
-    return data.friends;
-  }
-
-  async addFriend(friendCode) {
-    const data = await this.api.post('/friends', { friendCode });
-    return data;
-  }
-
-  async removeFriend(playerId) {
-    const data = await this.api.delete('/friends', { id: playerId });
-    return data.friends;
-  }
-
   async getProfile(playerId) {
     return this.api.get('/player', { id: playerId });
   }

@@ -12,10 +12,8 @@
     }
   ],
   "rewrites": [
-    { "source": "/challenge/:slug", "destination": "/index.html" },
     { "source": "/daily", "destination": "/index.html" },
-    { "source": "/leaderboard", "destination": "/index.html" },
-    { "source": "/friends", "destination": "/index.html" }
+    { "source": "/leaderboard", "destination": "/index.html" }
   ],
   "headers": [
     {

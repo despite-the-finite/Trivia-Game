@@ -64,12 +64,8 @@ export class ShareService {
     return `I scored ${score.toLocaleString('en-US')} on today's Entropic Brainwaves quiz (${correct}/${total} correct). Can you beat me?`;
   }
 
-  static challengeInviteText(displayName) {
-    return `${displayName} challenged you to a round of Entropic Brainwaves — same questions, same order. Think you can win?`;
-  }
-
-  static friendCodeText(displayName, friendCode) {
-    return `Add me on Entropic Brainwaves — I'm ${displayName}, friend code ${friendCode}.`;
+  static inviteText(displayName) {
+    return `${displayName} wants you to play Entropic Brainwaves — come play now.`;
   }
 }
 

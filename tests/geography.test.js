@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildGeographyQuestions } from '../backend/services/geographyTemplates.js';
-import { seededRandom, shuffle, normalizeFriendCode, friendCode } from '../backend/lib/ids.js';
+import { seededRandom, shuffle } from '../backend/lib/ids.js';
 
 /**
  * A stand-in for what geographyProvider returns from REST Countries and
@@ -171,12 +171,4 @@ test('a seeded shuffle is a permutation and is reproducible', () => {
   const b = shuffle(input, seededRandom('perm'));
   assert.deepEqual(a, b);
   assert.deepEqual([...a].sort((x, y) => x - y), input);
-});
-
-test('friend codes round-trip through normalisation', () => {
-  const code = friendCode('Karsh');
-  assert.match(code, /^[A-Z0-9]+-[A-Z0-9]{4}$/);
-  assert.equal(normalizeFriendCode(code), code);
-  assert.equal(normalizeFriendCode(code.toLowerCase().replace('-', ' ')), code);
-  assert.equal(normalizeFriendCode('nope'), null);
 });

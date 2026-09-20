@@ -18,10 +18,10 @@ import {
  *   GET  /api/session?id=<uuid>&view=review   per-question review (after finishing)
  *
  * Sessions are created elsewhere — by a category's daily quiz
- * (dailyChallengeService) or by a challenge (challengeService) — and always
- * arrive with their full question list and answer ordering fixed, so moving
- * between questions is instant and there is no mid-game network stall. This
- * endpoint only finishes, resumes and reviews them.
+ * (dailyChallengeService) — and always arrive with their full question list
+ * and answer ordering fixed, so moving between questions is instant and there
+ * is no mid-game network stall. This endpoint only finishes, resumes and
+ * reviews them.
  */
 export default createHandler({
   async POST(req) {

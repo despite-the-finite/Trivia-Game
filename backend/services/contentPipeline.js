@@ -108,8 +108,8 @@ async function storeQuestions(client, questions, { category, ttlMs }) {
       `INSERT INTO questions
          (category, question, answers, correct_index, explanation,
           source, source_url, source_published_at, source_document_id,
-          generator, expires_at, fingerprint)
-       VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          generator, difficulty, expires_at, fingerprint)
+       VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (fingerprint) DO NOTHING`,
       [
         category,
@@ -122,6 +122,7 @@ async function storeQuestions(client, questions, { category, ttlMs }) {
         q.sourcePublishedAt ?? null,
         q.sourceDocumentId ?? null,
         q.generator ?? 'llm',
+        ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
         expiresAt,
         q.fingerprint,
       ],

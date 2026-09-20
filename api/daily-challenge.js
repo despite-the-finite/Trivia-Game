@@ -24,7 +24,7 @@ function readCategory(value) {
  * /api/daily-challenge
  *
  *   GET  /api/daily-challenge?category=            today's status for the caller
- *   GET  /api/daily-challenge?view=leaderboard      today's board (scope=global|friends)
+ *   GET  /api/daily-challenge?view=leaderboard      today's board for that category
  *   POST /api/daily-challenge                       start (or resume) today's attempt
  *
  * Every category (including 'mixed', the original Daily Challenge) gets the
@@ -40,18 +40,12 @@ export default createHandler({
 
     if (q.view === 'leaderboard') {
       const viewer = await optionalPlayer(req);
-      const scope = q.scope === 'friends' ? 'friends' : 'global';
-      if (scope === 'friends' && !viewer) {
-        throw badRequest('A player token is required for the friends board.');
-      }
       return {
         day,
         category,
-        scope,
         entries: await getDailyLeaderboard({
           day,
           category,
-          scope,
           viewerId: viewer?.id ?? null,
           limit: q.limit,
         }),

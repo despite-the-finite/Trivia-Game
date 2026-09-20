@@ -80,10 +80,8 @@ export const GAME = {
   defaultQuestionCount: int(process.env.DEFAULT_QUESTION_COUNT, 10),
   maxQuestionCount: int(process.env.MAX_QUESTION_COUNT, 20),
   dailyQuestionCount: int(process.env.DAILY_QUESTION_COUNT, 10),
-  challengeQuestionCount: int(process.env.CHALLENGE_QUESTION_COUNT, 10),
   /** How long an unfinished session may be resumed / answered into. */
   sessionTtlMs: int(process.env.SESSION_TTL_MS, 2 * 60 * 60 * 1000),
-  challengeTtlMs: int(process.env.CHALLENGE_TTL_MS, 14 * 24 * 60 * 60 * 1000),
 };
 
 /**
@@ -94,8 +92,6 @@ export const LIMITS = {
   playerCreatePerHourPerIp: int(process.env.PLAYER_CREATE_LIMIT_PER_HOUR, 10),
   sessionsPerHour: int(process.env.SESSION_LIMIT_PER_HOUR, 60),
   answersPerHour: int(process.env.ANSWER_LIMIT_PER_HOUR, 400),
-  friendAddsPerHour: int(process.env.FRIEND_ADD_LIMIT_PER_HOUR, 30),
-  challengesPerHour: int(process.env.CHALLENGE_LIMIT_PER_HOUR, 30),
   recoveryCodesPerHour: int(process.env.RECOVERY_CODE_LIMIT_PER_HOUR, 5),
 };
 

@@ -3,8 +3,8 @@
 A trivia platform whose questions are built from the live internet, not from a
 file in the JavaScript bundle. Questions about current events, science, world
 geography and general knowledge are generated server-side from cited sources,
-validated, and cached. Scores, friends, leaderboards and challenges are all
-authoritative on the server.
+validated, and cached. Scores and the leaderboard are all authoritative on the
+server.
 
 Every category resets once a day: at midnight UTC each one materialises a single
 fixed quiz that every player sees, so a day's game is directly comparable across
@@ -107,6 +107,13 @@ Every value is overridable by environment variable — see `.env.example`. The
 target pool is small on purpose: each refresh only needs to comfortably cover
 that day's ~10-question quiz, not a large rotating bank.
 
+Science pulls from agencies (NASA, ESA) alongside broader outlets (Nature,
+Phys.org, ScienceDaily, NOAA, NIH, CERN) that between them cover physics,
+chemistry, biology, medicine and earth science, not just space. NASA and ESA
+publish far more often than the others, so `scienceProvider` caps how many
+documents any single source can contribute to a batch — otherwise the two space
+agencies alone would fill it and every question would end up about space.
+
 Upstream APIs and the model are **never** called on a player's request. The
 pipeline generates a batch ahead of time and gameplay reads from that bank. If
 the bank runs thin, a refresh is kicked off in the background and the player is
@@ -138,13 +145,28 @@ Rejections are written to `rejected_questions` with their reasons, and each run 
 summarised in `refresh_runs`, so it is possible to see *why* a batch underperformed
 rather than guessing.
 
+### Difficulty mix
+
+Every question is tagged `easy`, `medium` or `hard` at generation time, aiming
+for a roughly even split so a day's quiz never reads as uniformly hard. For the
+LLM categories, difficulty comes only from how well-known or precise the
+underlying fact is — never from ambiguous wording — and the model is asked to
+self-label each question against that rule. For geography, difficulty is
+derived deterministically from how prominent the subject is (a top-40 country's
+capital is easy; a country ranked 120th by population is hard). When a day's
+quiz is materialised, `pickBalancedSet` draws a roughly even spread across all
+three tiers per category (see [Categories and the daily quiz](#categories-and-the-daily-quiz)).
+Difficulty never changes scoring — see [Scoring](#scoring).
+
 ---
 
 ## Scoring
 
-Calculated entirely on the server from the stored question. There are no
-difficulty tiers — every correct answer is worth the same base points, with the
-same speed-bonus ceiling.
+Calculated entirely on the server from the stored question. Every quiz mixes
+easy, medium and hard questions (see [Question validation](#question-validation)),
+but difficulty never changes the payout — every correct answer is worth the
+same base points, with the same speed-bonus ceiling, so a run of hard questions
+never discourages a player relative to an easy one.
 
 | | Points |
 |---|---|
@@ -180,7 +202,6 @@ The frontend sends only `{questionId, selectedAnswer, responseMs}`.
 | Answer into someone else's game | The session must belong to the caller |
 | Claim an impossibly fast answer | Reconciled against server-side elapsed time |
 | Replay a day's quiz for extra score | Only the first completed attempt is scored; later plays are flagged `is_practice` and excluded from stats/leaderboards |
-| Grind a finished challenge | A completed participant cannot rejoin |
 | Script the API | Per-player and per-IP fixed-window limits in Postgres |
 
 This is not esports-grade anti-cheat, and it is not meant to be. It is meant to
@@ -202,10 +223,7 @@ creation; only its SHA-256 is stored.
 | `POST /api/answer` | Submit one answer; returns correctness, points, explanation and source |
 | `POST /api/player` | Create an account. `?action=recovery-code` / `?action=claim` move it to another device |
 | `GET /api/player` | Your profile and statistics, or `?id=` for a public profile |
-| `GET/POST/DELETE /api/friends` | List, add by friend code, remove |
-| `GET /api/leaderboard` | `period` × `scope` × `board` |
-| `POST /api/challenge` | Create a challenge, or `?action=join` to play one |
-| `GET /api/challenge?slug=` | Challenge results and share text |
+| `GET /api/leaderboard` | The permanent home-screen board: top players by all-time overall score, each broken out by category |
 | `GET /api/cron/refresh` | Scheduled content generation (requires `CRON_SECRET`) |
 | `GET /api/health` | Used by the frontend on boot to decide whether to show the offline screen |
 
@@ -233,30 +251,35 @@ flagged `is_practice` and never touches score history. If a question in a stored
 day's set ever becomes unavailable, the set rebuilds itself rather than failing
 for everyone until midnight.
 
-## Challenges
+## Leaderboard
 
-A challenge freezes both the **question ids** and the **answer permutation** at
-creation, independently of the day's quiz — it's an ad-hoc set drawn for exactly
-two players. Both players get the same questions, in the same order, with the
-options in the same places. Results show both scores, accuracy, response times
-and the margin:
+There is one board, permanently visible on the home screen: the top 10 players
+ranked by all-time overall score, each row broken out by category (Current
+Events, Science, Geography, General Knowledge) so a player's strengths are
+visible at a glance. It reads straight from each player's cached stats — no
+periods, no scopes, nothing to filter.
 
-```
-Karsh — 1,840
-Alex  — 1,620
-Karsh wins by 220 points
-```
+If the signed-in player is outside the top 10, their own row is appended below
+with their real rank instead of being left off the board, and that row is
+visually distinguished (bold, highlighted) so they can immediately spot
+themselves. There is no friends list and no separate scope — the board is
+global, for everyone.
 
-Sharing uses the Web Share API where it exists (the OS sheet: Messages, WhatsApp,
-Mail) and falls back to copying the link.
+## Inviting friends
+
+There is no head-to-head matchmaking and no friends list — "Invite" and
+"Invite a friend" just hand out a link to the app itself, so whoever opens it
+plays that category's or the Daily Challenge's shared quiz for the day and
+shows up on the leaderboard next to you. Sharing uses the Web Share API where
+it exists (the OS sheet: Messages, WhatsApp, Mail) and falls back to copying
+the link.
 
 ---
 
 ## Accounts
 
-Onboarding is one field. Type a name, get a player id, a friend code like
-`KARSH-7F4X`, and a token stored in `localStorage`. No password, no email, no
-verification step.
+Onboarding is one field. Type a name, get a player id and a token stored in
+`localStorage`. No password, no email, no verification step.
 
 To move to another device, generate a one-time recovery code that expires in 30
 minutes; redeeming it rotates the token onto the new device. That is the
@@ -277,10 +300,10 @@ backend/
   services/    contentPipeline, questionGenerator, questionValidator,
                geographyTemplates, questionService, scoringService,
                playerService, sessionService, leaderboardService,
-               challengeService, dailyChallengeService, llm
+               dailyChallengeService, llm
 public/
   js/services/ TriviaService, PlayerService, LeaderboardService,
-               ChallengeService, ShareService, ApiClient
+               ShareService, ApiClient
   js/ui/       DOM helpers
   js/app.js    screen routing and the game loop
 scripts/       dev-server, migrate, refresh
@@ -300,11 +323,10 @@ DATABASE_URL=postgres://… npm test                # + full end-to-end suite
 
 The end-to-end suite starts the real API handlers against a real Postgres, seeds
 the bank through the real template and validation code, then plays a category's
-daily quiz, submits answers, runs challenges, and asserts the security properties
-directly — that the answer key never reaches the client, that a question cannot
-be answered twice, that a session rejects another player's answers, that both
-sides of a challenge get an identical test, and that a replay of a completed
-day's quiz is scored as practice rather than rejected outright.
+daily quiz, submits answers, and asserts the security properties directly — that
+the answer key never reaches the client, that a question cannot be answered
+twice, that a session rejects another player's answers, and that a replay of a
+completed day's quiz is scored as practice rather than rejected outright.
 
 ---
 

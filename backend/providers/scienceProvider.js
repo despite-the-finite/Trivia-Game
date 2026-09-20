@@ -69,14 +69,27 @@ export async function collect({ maxAgeMs = 45 * 24 * 60 * 60 * 1000, limit = 60 
     { concurrency: 4, label: 'scienceProvider' },
   );
 
+  // NASA and ESA publish far more often than the other feeds, so reading
+  // items in feed order and stopping at `limit` let space news crowd out
+  // physics, chemistry, biology and earth science entirely. Cap how many
+  // documents any single source can contribute instead, so every feed gets a
+  // fair shot at the batch regardless of how prolific it is.
+  const perSourceCap = Math.max(Math.ceil((limit / feeds.length) * 1.5), 4);
+
   const seenUrls = new Set();
+  const perSourceCount = new Map();
   const documents = [];
 
   for (const item of batches.flat()) {
     if (!isUsable(item, { maxAgeMs })) continue;
     const canonicalUrl = item.url.split('#')[0].split('?')[0];
     if (seenUrls.has(canonicalUrl)) continue;
+
+    const usedFromSource = perSourceCount.get(item.sourceName) ?? 0;
+    if (usedFromSource >= perSourceCap) continue;
+
     seenUrls.add(canonicalUrl);
+    perSourceCount.set(item.sourceName, usedFromSource + 1);
 
     documents.push({
       provider: 'scienceProvider',
@@ -93,12 +106,10 @@ export async function collect({ maxAgeMs = 45 * 24 * 60 * 60 * 1000, limit = 60 
       },
       checksum: sha256(`scienceProvider|${canonicalUrl}|${item.title}`),
     });
-
-    if (documents.length >= limit) break;
   }
 
   documents.sort((a, b) => b.publishedAt - a.publishedAt);
-  return documents;
+  return documents.slice(0, limit);
 }
 
 export default { collect, name: 'scienceProvider' };

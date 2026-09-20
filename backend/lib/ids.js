@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 
 /** Ambiguous characters (0/O, 1/I/L) are excluded so codes survive being read aloud. */
 const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-const SLUG_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
 
 function randomFrom(alphabet, length) {
   const bytes = crypto.randomBytes(length);
@@ -11,33 +10,6 @@ function randomFrom(alphabet, length) {
     out += alphabet[bytes[i] % alphabet.length];
   }
   return out;
-}
-
-/**
- * Friend codes look like "KARSH-7F4X": a readable stem derived from the display
- * name plus random characters, so they are easy to say out loud but still hard
- * to guess.
- */
-export function friendCode(displayName = '') {
-  const stem = displayName
-    .toUpperCase()
-    .replace(/[^A-Z]/g, '')
-    .slice(0, 5);
-  const prefix = stem.length >= 3 ? stem : randomFrom(CODE_ALPHABET, 5);
-  return `${prefix}-${randomFrom(CODE_ALPHABET, 4)}`;
-}
-
-export function normalizeFriendCode(code) {
-  if (typeof code !== 'string') return null;
-  const cleaned = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (cleaned.length < 6 || cleaned.length > 12) return null;
-  // Canonical form always separates the last four characters.
-  return `${cleaned.slice(0, -4)}-${cleaned.slice(-4)}`;
-}
-
-/** Short, URL-safe challenge id, e.g. "abc123xy". */
-export function challengeSlug() {
-  return randomFrom(SLUG_ALPHABET, 8);
 }
 
 export function recoveryCode() {
@@ -55,7 +27,7 @@ export function sha256(value) {
 /**
  * Deterministic RNG (mulberry32) seeded from a string. Used for the daily
  * challenge so that a given day always produces the same question order for
- * every player, and for challenge answer permutations.
+ * every player.
  */
 export function seededRandom(seed) {
   let h = 1779033703 ^ seed.length;

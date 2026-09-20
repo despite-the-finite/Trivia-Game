@@ -13,8 +13,7 @@ import { once } from 'node:events';
  *
  * The question bank is seeded from the geography templates over a fixture
  * dataset, so this exercises templates → validator → storage → gameplay →
- * scoring → leaderboards → challenges without needing network access or an
- * LLM key.
+ * scoring → leaderboards without needing network access or an LLM key.
  */
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
@@ -39,9 +38,7 @@ async function startServer() {
     '/api/trivia': (await import('../api/trivia.js')).default,
     '/api/session': (await import('../api/session.js')).default,
     '/api/answer': (await import('../api/answer.js')).default,
-    '/api/friends': (await import('../api/friends.js')).default,
     '/api/leaderboard': (await import('../api/leaderboard.js')).default,
-    '/api/challenge': (await import('../api/challenge.js')).default,
     '/api/daily-challenge': (await import('../api/daily-challenge.js')).default,
   };
 
@@ -139,7 +136,7 @@ test.before(async () => {
   // Clean slate for repeat runs.
   await db.query(
     `TRUNCATE players, questions, source_documents, rate_limits,
-              daily_challenges, challenges, refresh_runs CASCADE`,
+              daily_challenges, refresh_runs CASCADE`,
   );
   await seedQuestions();
   await startServer();
@@ -162,7 +159,6 @@ describe('a full game: sign up, play, score, finish', async () => {
   const created = await call('/api/player', { method: 'POST', body: { displayName: 'Karsh' } });
   assert.equal(created.status, 201);
   const token = created.body.token;
-  assert.match(created.body.player.friendCode, /^[A-Z0-9]+-[A-Z0-9]{4}$/);
 
   const started = await startQuiz('geography', token);
   assert.equal(started.status, 201);
@@ -318,101 +314,41 @@ describe('a category quiz is a fixed set: replays reuse the same set and order a
   );
 });
 
-describe('friends, leaderboards and comparison', async () => {
+describe('the leaderboard ranks by overall score and breaks it out by category', async () => {
   const karsh = await call('/api/player', { method: 'POST', body: { displayName: 'Kara' } });
   const alex = await call('/api/player', { method: 'POST', body: { displayName: 'Alexi' } });
 
-  const added = await call('/api/friends', {
-    method: 'POST',
-    token: karsh.body.token,
-    body: { friendCode: alex.body.player.friendCode },
-  });
-  assert.equal(added.status, 201);
-  assert.equal(added.body.added.displayName, 'Alexi');
-
-  // Friendship is mutual, so Alexi sees Kara too.
-  const alexFriends = await call('/api/friends', { token: alex.body.token });
-  assert.ok(alexFriends.body.friends.some((f) => f.displayName === 'Kara'));
-
-  const board = await call('/api/leaderboard?scope=friends&period=week&board=overall', {
-    token: karsh.body.token,
-  });
-  assert.equal(board.status, 200);
-  assert.equal(board.body.scope, 'friends');
-  assert.equal(board.body.period, 'week');
-
-  const globalBoard = await call('/api/leaderboard?scope=global&period=all');
-  assert.equal(globalBoard.status, 200);
-
-  // The friends board requires a token; global does not.
-  const anon = await call('/api/leaderboard?scope=friends');
-  assert.equal(anon.status, 400);
-});
-
-describe('a challenge gives both players the identical set and ordering', async () => {
-  const host = await call('/api/player', { method: 'POST', body: { displayName: 'Host' } });
-  const guest = await call('/api/player', { method: 'POST', body: { displayName: 'Guest' } });
-
-  const created = await call('/api/challenge', {
-    method: 'POST',
-    token: host.body.token,
-    body: { category: 'geography', count: 5 },
-  });
-  assert.equal(created.status, 201);
-  const slug = created.body.challenge.slug;
-  assert.match(created.body.url, /\/challenge\/[a-z0-9]{8}$/);
-
-  const hostRun = await call('/api/challenge?action=join', {
-    method: 'POST', token: host.body.token, body: { slug },
-  });
-  const guestRun = await call('/api/challenge?action=join', {
-    method: 'POST', token: guest.body.token, body: { slug },
-  });
-
-  assert.deepEqual(
-    hostRun.body.questions.map((q) => q.id),
-    guestRun.body.questions.map((q) => q.id),
-    'both players must get the same questions in the same order',
-  );
-  assert.deepEqual(
-    hostRun.body.questions.map((q) => q.answers),
-    guestRun.body.questions.map((q) => q.answers),
-    'answer placement must be identical for both players',
-  );
-
-  for (const run of [
-    { token: host.body.token, payload: hostRun.body },
-    { token: guest.body.token, payload: guestRun.body },
-  ]) {
-    for (const q of run.payload.questions) {
-      await call('/api/answer', {
-        method: 'POST',
-        token: run.token,
-        body: {
-          sessionId: run.payload.session.id,
-          questionId: q.id,
-          selectedAnswer: 0,
-          responseMs: 4000,
-        },
-      });
-    }
-    await call('/api/session', {
-      method: 'POST', token: run.token, body: { sessionId: run.payload.session.id },
+  const run = await startQuiz('geography', karsh.body.token);
+  for (const q of run.body.questions) {
+    await call('/api/answer', {
+      method: 'POST',
+      token: karsh.body.token,
+      body: { sessionId: run.body.session.id, questionId: q.id, selectedAnswer: 0, responseMs: 3000 },
     });
   }
-
-  const results = await call(`/api/challenge?slug=${slug}`, { token: host.body.token });
-  assert.equal(results.status, 200);
-  assert.equal(results.body.participants.length, 2);
-  assert.ok(results.body.participants.every((p) => p.completed));
-  assert.ok(['decided', 'tie'].includes(results.body.outcome.status));
-  assert.ok(results.body.shareText.includes('—'), 'share text lists the scores');
-
-  // Replaying a finished challenge is refused.
-  const replay = await call('/api/challenge?action=join', {
-    method: 'POST', token: host.body.token, body: { slug },
+  await call('/api/session', {
+    method: 'POST', token: karsh.body.token, body: { sessionId: run.body.session.id },
   });
-  assert.equal(replay.status, 409);
+
+  const board = await call('/api/leaderboard?limit=10');
+  assert.equal(board.status, 200);
+
+  const kara = board.body.entries.find((e) => e.displayName === 'Kara');
+  assert.ok(kara, 'a player who has played appears on the board');
+  assert.ok(kara.categoryScores.geography > 0, 'category scores are broken out per category');
+  assert.equal(
+    kara.totalScore,
+    kara.categoryScores.geography,
+    'overall score matches the one category played so far',
+  );
+
+  // A player who has never played does not clutter the board.
+  assert.ok(!board.body.entries.some((e) => e.displayName === 'Alexi'));
+
+  // The endpoint is open to anonymous callers; there is just no viewer row.
+  const anon = await call('/api/leaderboard');
+  assert.equal(anon.status, 200);
+  assert.equal(anon.body.viewerRow, null);
 });
 
 describe('the daily challenge is identical for everyone and scored once', async () => {
@@ -453,7 +389,7 @@ describe('the daily challenge is identical for everyone and scored once', async 
   assert.equal(status.body.played, true);
   assert.ok(status.body.yourResult.score >= 0);
 
-  const board = await call('/api/daily-challenge?view=leaderboard&scope=global');
+  const board = await call('/api/daily-challenge?view=leaderboard');
   assert.equal(board.status, 200);
   assert.ok(board.body.entries.length >= 1);
   assert.ok('completionMs' in board.body.entries[0]);

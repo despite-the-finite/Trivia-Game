@@ -3,7 +3,7 @@
 -- Design notes:
 --  * Question content (`questions`) is fully separated from gameplay
 --    (`game_sessions`, `session_answers`) so the same validated question can be
---    reused across sessions, challenges and daily challenges.
+--    reused across sessions and daily challenges.
 --  * `source_documents` keeps the raw factual material a question was derived
 --    from, so provenance survives even if the question text is regenerated.
 --  * `score_events` is an append-only ledger. Daily/weekly/monthly leaderboards
@@ -19,7 +19,6 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS players (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   display_name    TEXT        NOT NULL,
-  friend_code     TEXT        NOT NULL UNIQUE,
   token_hash      TEXT        NOT NULL UNIQUE,
   email           TEXT        UNIQUE,
   is_anonymous    BOOLEAN     NOT NULL DEFAULT TRUE,
@@ -29,7 +28,8 @@ CREATE TABLE IF NOT EXISTS players (
   last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS players_friend_code_idx ON players (friend_code);
+DROP INDEX IF EXISTS players_friend_code_idx;
+ALTER TABLE players DROP COLUMN IF EXISTS friend_code;
 
 -- Denormalised counters. Rebuildable from score_events + game_sessions.
 CREATE TABLE IF NOT EXISTS player_stats (
@@ -66,13 +66,7 @@ ALTER TABLE player_stats DROP COLUMN IF EXISTS easy_correct;
 ALTER TABLE player_stats DROP COLUMN IF EXISTS medium_correct;
 ALTER TABLE player_stats DROP COLUMN IF EXISTS hard_correct;
 
-CREATE TABLE IF NOT EXISTS friendships (
-  player_id  UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  friend_id  UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (player_id, friend_id),
-  CHECK (player_id <> friend_id)
-);
+DROP TABLE IF EXISTS friendships CASCADE;
 
 -- ---------------------------------------------------------------------------
 -- Trivia content
@@ -106,6 +100,7 @@ CREATE TABLE IF NOT EXISTS questions (
   source_published_at TIMESTAMPTZ,
   source_document_id  UUID        REFERENCES source_documents(id) ON DELETE SET NULL,
   generator           TEXT        NOT NULL,   -- llm | template | template+llm
+  difficulty          TEXT        NOT NULL DEFAULT 'medium', -- easy | medium | hard
   generated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at          TIMESTAMPTZ NOT NULL,
   fingerprint         TEXT        NOT NULL UNIQUE, -- normalised question text hash, blocks duplicates
@@ -117,11 +112,31 @@ CREATE TABLE IF NOT EXISTS questions (
   CHECK (jsonb_array_length(answers) BETWEEN 2 AND 6)
 );
 
-ALTER TABLE questions DROP COLUMN IF EXISTS difficulty;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'questions' AND column_name = 'difficulty'
+  ) THEN
+    ALTER TABLE questions ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'medium';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'questions_difficulty_check' AND conrelid = 'questions'::regclass
+  ) THEN
+    ALTER TABLE questions
+      ADD CONSTRAINT questions_difficulty_check CHECK (difficulty IN ('easy', 'medium', 'hard'));
+  END IF;
+END $$;
 
 DROP INDEX IF EXISTS questions_pool_idx;
 CREATE INDEX IF NOT EXISTS questions_pool_idx
   ON questions (category, expires_at DESC)
+  WHERE active;
+
+CREATE INDEX IF NOT EXISTS questions_pool_difficulty_idx
+  ON questions (category, difficulty, expires_at DESC)
   WHERE active;
 
 CREATE INDEX IF NOT EXISTS questions_expiry_idx ON questions (expires_at) WHERE active;
@@ -159,11 +174,10 @@ CREATE INDEX IF NOT EXISTS refresh_runs_category_idx
 CREATE TABLE IF NOT EXISTS game_sessions (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   player_id      UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  mode           TEXT        NOT NULL,        -- daily | challenge
+  mode           TEXT        NOT NULL,        -- daily
   category       TEXT        NOT NULL,        -- includes 'mixed'
   question_ids   UUID[]      NOT NULL,
   answer_orders  JSONB       NOT NULL,        -- { [questionId]: [canonicalIndex, ...] }
-  challenge_id   UUID,  -- FK added after `challenges` exists, see bottom of file
   daily_date     DATE,
   is_practice    BOOLEAN     NOT NULL DEFAULT FALSE, -- replay of a day's quiz after the scoring attempt
   total_score    INTEGER     NOT NULL DEFAULT 0,
@@ -175,6 +189,8 @@ CREATE TABLE IF NOT EXISTS game_sessions (
 );
 
 ALTER TABLE game_sessions DROP COLUMN IF EXISTS difficulty;
+ALTER TABLE game_sessions DROP CONSTRAINT IF EXISTS game_sessions_challenge_id_fkey;
+ALTER TABLE game_sessions DROP COLUMN IF EXISTS challenge_id;
 
 DO $$
 BEGIN
@@ -225,34 +241,9 @@ CREATE INDEX IF NOT EXISTS score_events_player_idx
   ON score_events (player_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
--- Challenges
--- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS challenges (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug          TEXT        NOT NULL UNIQUE,  -- short id used in the share URL
-  challenger_id UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  category      TEXT        NOT NULL,
-  question_ids  UUID[]      NOT NULL,
-  answer_orders JSONB       NOT NULL,         -- fixed for every participant
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at    TIMESTAMPTZ NOT NULL
-);
-
-ALTER TABLE challenges DROP COLUMN IF EXISTS difficulty;
-
-CREATE TABLE IF NOT EXISTS challenge_participants (
-  challenge_id UUID        NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
-  player_id    UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  session_id   UUID        REFERENCES game_sessions(id) ON DELETE SET NULL,
-  role         TEXT        NOT NULL,          -- challenger | opponent
-  score        INTEGER     NOT NULL DEFAULT 0,
-  correct_count INTEGER    NOT NULL DEFAULT 0,
-  total_response_ms INTEGER NOT NULL DEFAULT 0,
-  completed_at TIMESTAMPTZ,
-  joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (challenge_id, player_id)
-);
+DROP TABLE IF EXISTS challenge_participants CASCADE;
+DROP TABLE IF EXISTS challenges CASCADE;
 
 -- One fixed, shared question set per (UTC day, category) — 'mixed' is the
 -- original global Daily Challenge; every other category is that category's
@@ -301,21 +292,6 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   hits         INTEGER     NOT NULL DEFAULT 0,
   PRIMARY KEY (bucket, window_start)
 );
-
--- ---------------------------------------------------------------------------
--- Deferred constraints (declared here because of table ordering)
--- ---------------------------------------------------------------------------
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'game_sessions_challenge_id_fkey'
-  ) THEN
-    ALTER TABLE game_sessions
-      ADD CONSTRAINT game_sessions_challenge_id_fkey
-      FOREIGN KEY (challenge_id) REFERENCES challenges(id) ON DELETE SET NULL;
-  END IF;
-END $$;
 
 -- Multiple attempts per (player, day, category) are allowed — replays after the
 -- first completed one are marked is_practice and excluded from scoring, rather

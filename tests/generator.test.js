@@ -220,7 +220,48 @@ test('the prompt hands the model the supplied facts and nothing else', async () 
   assert.equal(seenSchema.type, 'object');
   assert.equal(seenSchema.additionalProperties, false);
   const item = seenSchema.properties.questions.items;
-  assert.equal(item.properties.difficulty, undefined, 'difficulty is no longer part of the schema');
+  assert.deepEqual(item.properties.difficulty.enum, ['easy', 'medium', 'hard']);
+  assert.ok(item.required.includes('difficulty'), 'every question must declare a difficulty');
   assert.ok(item.required.includes('correctAnswer'));
   assert.ok(item.required.includes('sourceId'));
+});
+
+test('an unrecognised or missing difficulty falls back to medium', async () => {
+  const result = await generateFromDocuments(documents, {
+    category: 'current-events',
+    count: 2,
+    generate: stubModel([
+      {
+        sourceId: 1,
+        question: 'How much did the harbour bridge refit cost?',
+        answers: ['412 million euros', '180 million euros', '95 million euros', '600 million euros'],
+        correctAnswer: '412 million euros',
+        explanation: 'The refit cost 412 million euros and finished in August 2026.',
+        difficulty: 'impossible',
+      },
+    ]),
+  });
+
+  assert.equal(result.accepted.length, 1, JSON.stringify(result.rejected));
+  assert.equal(result.accepted[0].difficulty, 'medium');
+});
+
+test('a valid difficulty is kept as given', async () => {
+  const result = await generateFromDocuments(documents, {
+    category: 'current-events',
+    count: 2,
+    generate: stubModel([
+      {
+        sourceId: 2,
+        question: 'How many kilometres of track did the rail extension add?',
+        answers: ['84', '12', '150', '210'],
+        correctAnswer: '84',
+        explanation: 'The extension added 84 kilometres of track.',
+        difficulty: 'hard',
+      },
+    ]),
+  });
+
+  assert.equal(result.accepted.length, 1, JSON.stringify(result.rejected));
+  assert.equal(result.accepted[0].difficulty, 'hard');
 });
