@@ -77,10 +77,10 @@ export async function getDayLeaderboard({ day = todayUtc(), viewerId = null, lim
        FROM (
          SELECT player_id,
                 SUM(points)::int AS total_score,
-                SUM(points) FILTER (WHERE category = 'current-events')::int    AS current_events_score,
-                SUM(points) FILTER (WHERE category = 'science')::int          AS science_score,
-                SUM(points) FILTER (WHERE category = 'geography')::int        AS geography_score,
-                SUM(points) FILTER (WHERE category = 'general-knowledge')::int AS general_knowledge_score
+                COALESCE(SUM(points) FILTER (WHERE category = 'current-events'), 0)::int    AS current_events_score,
+                COALESCE(SUM(points) FILTER (WHERE category = 'science'), 0)::int           AS science_score,
+                COALESCE(SUM(points) FILTER (WHERE category = 'geography'), 0)::int         AS geography_score,
+                COALESCE(SUM(points) FILTER (WHERE category = 'general-knowledge'), 0)::int AS general_knowledge_score
            FROM score_events
           WHERE created_at >= $1 AND created_at < $2
           GROUP BY player_id
