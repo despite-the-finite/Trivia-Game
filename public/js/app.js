@@ -30,6 +30,8 @@ const state = {
 
 function showScreen(name) {
   state.screen = name;
+  // Lets the stylesheet theme individual screens (cover/home) from the body.
+  document.body.dataset.view = name;
   for (const section of $$('[data-screen]')) {
     section.classList.toggle('is-active', section.dataset.screen === name);
   }

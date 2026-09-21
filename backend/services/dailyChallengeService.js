@@ -1,12 +1,13 @@
-import { queryOne, withAdvisoryLock, lockKey } from '../db/index.js';
+import { queryOne, queryRows, withAdvisoryLock, lockKey } from '../db/index.js';
 import { APP, GAME } from '../lib/config.js';
 import { unavailable } from '../lib/http.js';
+import { todayGameDay } from '../lib/day.js';
 import { seededRandom } from '../lib/ids.js';
 import { pickBalancedSet, buildAnswerOrders, getQuestionsByIds } from './questionService.js';
 import { createFixedSession, shapeSessionForPlay } from './sessionService.js';
 
 /**
- * dailyChallengeService — one fixed, shared question set per (UTC day, category).
+ * dailyChallengeService — one fixed, shared question set per (game day, category).
  *
  * `category: 'mixed'` is the original global Daily Challenge; every other
  * category is that category's own daily quiz — this is what "Quick Play" now
@@ -19,12 +20,47 @@ import { createFixedSession, shapeSessionForPlay } from './sessionService.js';
  * first completed attempt is scored — later ones are marked `is_practice` and
  * excluded from stats/leaderboards (see sessionService).
  *
- * "Day" is UTC. A local-timezone daily would mean multiple concurrent boards
- * and a much messier "once per day" rule.
+ * "Day" is the game timezone's calendar day (Mountain time by default; see
+ * lib/day.js) — one timezone for everyone, so there is one board at a time.
  */
 
-export function todayUtc() {
-  return new Date().toISOString().slice(0, 10);
+export { todayGameDay };
+
+/** How many past days of quizzes a new quiz avoids repeating questions from. */
+export const NO_REPEAT_DAYS = 7;
+
+/**
+ * Question ids already used by other quizzes: every category's quiz for the
+ * previous NO_REPEAT_DAYS days, and the other categories' quizzes for `day`
+ * itself (so the Mixed quiz never re-asks what a category quiz just did).
+ * `sameDayOnly` narrows that to the second half, as a fallback for a bank too
+ * thin to satisfy the full window.
+ */
+async function recentlyUsedIds(day, category, { sameDayOnly = false } = {}) {
+  const rows = await queryRows(
+    `SELECT DISTINCT unnest(question_ids) AS id
+       FROM daily_challenges
+      WHERE NOT (day = $1::date AND category = $2)
+        AND day <= $1::date
+        AND day >= $1::date - ($3 || ' days')::interval`,
+    [day, category, String(sameDayOnly ? 0 : NO_REPEAT_DAYS)],
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Picks a day's set while avoiding repeats. If the bank is too thin to fill a
+ * quiz without them, the window narrows step by step rather than failing — a
+ * repeated question is better than no quiz.
+ */
+async function pickFreshSet(day, category) {
+  const count = GAME.dailyQuestionCount;
+  for (const sameDayOnly of [false, true]) {
+    const excludeIds = await recentlyUsedIds(day, category, { sameDayOnly });
+    const questions = await pickBalancedSet({ category, count, excludeIds });
+    if (questions.length >= count) return questions;
+  }
+  return pickBalancedSet({ category, count });
 }
 
 async function materialiseDay(day, category) {
@@ -42,10 +78,7 @@ async function materialiseDay(day, category) {
       console.warn(`[dailyChallenge] rebuilding ${day}/${category}: ${existing.question_ids.length - available.length} question(s) missing`);
     }
 
-    const questions = await pickBalancedSet({
-      category,
-      count: GAME.dailyQuestionCount,
-    });
+    const questions = await pickFreshSet(day, category);
     if (questions.length < GAME.dailyQuestionCount) {
       throw unavailable("Today's quiz is still being prepared. Try again shortly.");
     }
@@ -75,7 +108,7 @@ async function materialiseDay(day, category) {
   return row;
 }
 
-export async function getDailyStatus(player, category = 'mixed', day = todayUtc()) {
+export async function getDailyStatus(player, category = 'mixed', day = todayGameDay()) {
   const daily = await materialiseDay(day, category);
 
   const attempt = player
@@ -122,7 +155,7 @@ export async function getDailyStatus(player, category = 'mixed', day = todayUtc(
  * progress. Once the scored attempt is completed, further plays that day are
  * practice runs: scored for immediate feedback but never counted twice.
  */
-export async function startDaily(player, category = 'mixed', day = todayUtc()) {
+export async function startDaily(player, category = 'mixed', day = todayGameDay()) {
   const daily = await materialiseDay(day, category);
 
   const scored = await queryOne(

@@ -1,6 +1,7 @@
 import { query, queryOne, withTransaction } from '../db/index.js';
 import { opaqueToken, recoveryCode, sha256 } from '../lib/ids.js';
 import { badRequest, notFound } from '../lib/http.js';
+import { GAME } from '../lib/config.js';
 
 /**
  * playerService — lightweight persistent identities.
@@ -96,18 +97,18 @@ export function shapePlayer(row) {
   };
 }
 
+/** Points today / this week / this month, with period boundaries in the game timezone. */
+const PERIOD_SCORES_SQL = `SELECT
+       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('day', NOW() AT TIME ZONE $2) AT TIME ZONE $2), 0)::int   AS daily,
+       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE $2) AT TIME ZONE $2), 0)::int  AS weekly,
+       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('month', NOW() AT TIME ZONE $2) AT TIME ZONE $2), 0)::int AS monthly
+     FROM score_events WHERE player_id = $1`;
+
 export async function getStats(playerId) {
   const stats = await queryOne('SELECT * FROM player_stats WHERE player_id = $1', [playerId]);
   if (!stats) return emptyStats();
 
-  const periods = await queryOne(
-    `SELECT
-       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('day', NOW())), 0)::int   AS daily,
-       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('week', NOW())), 0)::int  AS weekly,
-       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('month', NOW())), 0)::int AS monthly
-     FROM score_events WHERE player_id = $1`,
-    [playerId],
-  );
+  const periods = await queryOne(PERIOD_SCORES_SQL, [playerId, GAME.timezone]);
 
   return shapeStats(stats, periods);
 }
@@ -208,14 +209,7 @@ export async function getPublicProfile(playerId) {
   );
   if (!row) throw notFound('Player not found.');
 
-  const periods = await queryOne(
-    `SELECT
-       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('day', NOW())), 0)::int   AS daily,
-       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('week', NOW())), 0)::int  AS weekly,
-       COALESCE(SUM(points) FILTER (WHERE created_at >= date_trunc('month', NOW())), 0)::int AS monthly
-     FROM score_events WHERE player_id = $1`,
-    [playerId],
-  );
+  const periods = await queryOne(PERIOD_SCORES_SQL, [playerId, GAME.timezone]);
 
   return {
     id: row.id,

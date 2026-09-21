@@ -6,7 +6,7 @@ geography and general knowledge are generated server-side from cited sources,
 validated, and cached. Scores and the leaderboard are all authoritative on the
 server.
 
-Every category resets once a day: at midnight UTC each one materialises a single
+Every category resets once a day: at midnight Mountain time each one materialises a single
 fixed quiz that every player sees, so a day's game is directly comparable across
 everyone who plays it. Nobody has to ship a new build for new trivia to appear.
 
@@ -57,7 +57,7 @@ tamper with.
 
 **Every category is one shared quiz a day.** There are no difficulty tiers and no
 per-play random draw. Each category materialises a single fixed set of questions
-once every 24 hours (UTC), and every player who plays that category that day gets
+once every 24 hours (midnight Mountain time), and every player who plays that category that day gets
 exactly those questions in exactly that order — the same mechanism the original
 Daily Challenge used, just applied per category. A player's first completed
 attempt at a day's quiz is the one that counts for stats and leaderboards; playing
@@ -84,8 +84,10 @@ enough to get a playable game.
 The `api/` directory is a set of Vercel serverless functions and `public/` is a
 static frontend, so `vercel deploy` works with no build step. Set `DATABASE_URL`
 (use a **pooled** connection string), `ANTHROPIC_API_KEY`, `PUBLIC_BASE_URL` and
-`CRON_SECRET`. `vercel.json` registers the content-refresh cron once a day at
-midnight UTC; each category then decides for itself whether it is actually due.
+`CRON_SECRET`. `vercel.json` registers the content-refresh cron for midnight Mountain time. Vercel
+Cron is UTC-only and Mountain midnight is 06:00 UTC in summer but 07:00 UTC in
+winter, so it fires at both and `/api/cron/refresh` runs only the one that is
+actually local midnight; each category then decides for itself whether it is due.
 
 Any Postgres works — Neon, Supabase, RDS, or a local server.
 
@@ -99,7 +101,7 @@ that day — see [Categories and the daily quiz](#categories-and-the-daily-quiz)
 | Category | Refresh | Question TTL | Target pool | Source |
 |---|---|---|---|---|
 | Current Events | 24 h | 48 h | 20 | Reuters, AP, BBC, NPR, Al Jazeera, CBC, Guardian |
-| Science | 24 h | 48 h | 20 | NASA, ESA, Nature, Phys.org, ScienceDaily, NOAA, NIH, CERN |
+| Science | 24 h | 48 h | 20 | NASA, ESA, Nature, Phys.org, ScienceDaily, MIT News, Science News, Live Science, USGS and others |
 | Geography | 24 h | 48 h | 20 | Wikidata |
 | General Knowledge | 24 h | 48 h | 20 | Wikipedia "On This Day" |
 
@@ -107,12 +109,14 @@ Every value is overridable by environment variable — see `.env.example`. The
 target pool is small on purpose: each refresh only needs to comfortably cover
 that day's ~10-question quiz, not a large rotating bank.
 
-Science pulls from agencies (NASA, ESA) alongside broader outlets (Nature,
-Phys.org, ScienceDaily, NOAA, NIH, CERN) that between them cover physics,
-chemistry, biology, medicine and earth science, not just space. NASA and ESA
-publish far more often than the others, so `scienceProvider` caps how many
-documents any single source can contribute to a batch — otherwise the two space
-agencies alone would fill it and every question would end up about space.
+Science pulls from space agencies (NASA, ESA) alongside topic-specific feeds
+for physics, chemistry, biology, health, earth science and technology. Every
+document is tagged with a topic — by the feed it came from, or by keywords for
+general feeds — and `scienceProvider` builds each batch round-robin across
+topics, holding space to 15% of it. NASA and ESA publish far more often than
+everything else, so any order- or source-based cut-off lets them crowd the
+batch. A feed can be pinned to a topic in `SCIENCE_FEEDS` with a third field
+(`Name|url|biology`).
 
 Upstream APIs and the model are **never** called on a player's request. The
 pipeline generates a batch ahead of time and gameplay reads from that bank. If
@@ -145,17 +149,30 @@ Rejections are written to `rejected_questions` with their reasons, and each run 
 summarised in `refresh_runs`, so it is possible to see *why* a batch underperformed
 rather than guessing.
 
+### Avoiding repeats
+
+A new day's quiz excludes every question used by any quiz in the previous 7 days
+and by the other categories' quizzes the same day, so Mixed never re-asks what a
+category quiz just did. If the bank is too thin to fill a quiz that way, the
+window narrows step by step rather than failing. At refresh time, source
+documents that already produced questions in the last 30 days are skipped (a
+reworded question about the same article would otherwise get a new fingerprint
+and slip through), and duplicate detection looks back 60 days including expired
+questions.
+
 ### Difficulty mix
 
-Every question is tagged `easy`, `medium` or `hard` at generation time, aiming
-for a roughly even split so a day's quiz never reads as uniformly hard. For the
+Every question is tagged `easy`, `medium` or `hard` at generation time. Quizzes
+lean easy on purpose — about half easy, a third medium and one in six hard
+(`DIFFICULTY_MIX` in `questionService.js`) — so a day's quiz feels winnable
+with a couple of real stretch questions. For the
 LLM categories, difficulty comes only from how well-known or precise the
 underlying fact is — never from ambiguous wording — and the model is asked to
 self-label each question against that rule. For geography, difficulty is
 derived deterministically from how prominent the subject is (a top-40 country's
 capital is easy; a country ranked 120th by population is hard). When a day's
-quiz is materialised, `pickBalancedSet` draws a roughly even spread across all
-three tiers per category (see [Categories and the daily quiz](#categories-and-the-daily-quiz)).
+quiz is materialised, `pickBalancedSet` draws that mix per category, topping
+up a short tier from the next-easiest one (see [Categories and the daily quiz](#categories-and-the-daily-quiz)).
 Difficulty never changes scoring — see [Scoring](#scoring).
 
 ---
@@ -239,7 +256,7 @@ undo the anti-cheat model, so the browser gets the redacted shape.
 
 There are four categories — Current Events, Science, Geography and General
 Knowledge — plus Mixed, which draws an even spread across all four. Each one is
-materialised once per UTC day into a fixed set of questions in a fixed order,
+materialised once per Mountain-time day into a fixed set of questions in a fixed order,
 seeded deterministically from the date and category, so everyone who plays a
 given category that day gets an identical test. Mixed is the original Daily
 Challenge; the other four are what "Quick Play" now means.
@@ -254,7 +271,7 @@ for everyone until midnight.
 ## Leaderboard
 
 There is one board, permanently visible on the home screen: the top 10 players
-for **today** (UTC), ranked by points earned that calendar day, each row
+for **today** (Mountain time), ranked by points earned that calendar day, each row
 broken out by category (Current Events, Science, Geography, General
 Knowledge) so a player's strengths are visible at a glance. It is computed
 from the `score_events` ledger filtered to that day — not an all-time total —
@@ -356,8 +373,10 @@ stops the timer rather than penalising the player.
   `SCIENCE_FEEDS` exist so you can point at reachable sources.
 - **Flag questions** are not implemented. The play shape currently carries text
   options only; adding image answers would mean extending that shape.
-- **Timezone.** Every category's day is UTC. A local-timezone daily would mean
-  several concurrent boards and a much murkier "once per day" rule.
+- **Timezone.** Every category's day is Mountain time (`America/Denver`, daylight
+  saving included; override with `GAME_TIMEZONE`), for everyone. Per-player local
+  days would mean several concurrent boards and a much murkier "once per day"
+  rule. Around a daylight-saving change a day is 23 or 25 hours long.
 - **Rate limits** are per-IP for account creation, which can bite users behind
   shared NAT. Raise `PLAYER_CREATE_LIMIT_PER_HOUR` if that applies to you.
 - **Generation cost.** A refresh generates a batch, not a question per request, so

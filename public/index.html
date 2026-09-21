@@ -17,6 +17,64 @@
     />
   </head>
   <body>
+    <!-- Decorative sky for the cover and home screens (see styles.css). -->
+    <div class="ambient" aria-hidden="true">
+      <svg width="100%" height="100%" focusable="false">
+        <circle class="star tw1" cx="2%" cy="8%" r="1.1" opacity="0.7" />
+        <circle class="star tw2" cx="5%" cy="22%" r="0.9" opacity="0.5" />
+        <circle class="star tw3" cx="3%" cy="38%" r="1.3" opacity="0.8" />
+        <circle class="star tw1 star--teal" cx="7%" cy="52%" r="1.6" opacity="0.85" />
+        <circle class="star tw2" cx="2%" cy="66%" r="0.9" opacity="0.5" />
+        <circle class="star tw3" cx="6%" cy="80%" r="1.2" opacity="0.7" />
+        <circle class="star tw1" cx="3%" cy="93%" r="1" opacity="0.6" />
+        <circle class="star tw2" cx="9%" cy="14%" r="0.8" opacity="0.4" />
+        <circle class="star tw3 star--amber" cx="11%" cy="44%" r="1.4" opacity="0.8" />
+        <circle class="star tw1" cx="8%" cy="72%" r="0.8" opacity="0.4" />
+        <circle class="star tw2" cx="12%" cy="90%" r="1" opacity="0.55" />
+        <circle class="star tw2" cx="98%" cy="6%" r="1.2" opacity="0.7" />
+        <circle class="star tw3" cx="95%" cy="19%" r="0.9" opacity="0.5" />
+        <circle class="star tw1" cx="97%" cy="34%" r="1.3" opacity="0.8" />
+        <circle class="star tw2" cx="93%" cy="47%" r="0.8" opacity="0.4" />
+        <circle class="star tw3" cx="99%" cy="60%" r="1" opacity="0.6" />
+        <circle class="star tw1 star--magenta" cx="94%" cy="76%" r="1.6" opacity="0.85" />
+        <circle class="star tw2" cx="97%" cy="90%" r="0.9" opacity="0.5" />
+        <circle class="star tw3" cx="90%" cy="11%" r="0.8" opacity="0.4" />
+        <circle class="star tw1" cx="88%" cy="38%" r="1" opacity="0.5" />
+        <circle class="star tw2" cx="91%" cy="84%" r="1.2" opacity="0.7" />
+        <circle class="star tw3" cx="87%" cy="96%" r="0.8" opacity="0.4" />
+        <circle class="star tw1" cx="24%" cy="3%" r="0.9" opacity="0.5" />
+        <circle class="star tw2" cx="38%" cy="6%" r="0.8" opacity="0.4" />
+        <circle class="star tw3" cx="52%" cy="2%" r="1.1" opacity="0.6" />
+        <circle class="star tw1" cx="66%" cy="5%" r="0.8" opacity="0.4" />
+        <circle class="star tw2" cx="78%" cy="3%" r="1" opacity="0.55" />
+        <circle class="star tw3" cx="20%" cy="97%" r="0.9" opacity="0.5" />
+        <circle class="star tw1" cx="34%" cy="94%" r="0.8" opacity="0.4" />
+        <circle class="star tw2" cx="50%" cy="98%" r="1.1" opacity="0.6" />
+        <circle class="star tw3" cx="64%" cy="95%" r="0.8" opacity="0.4" />
+        <circle class="star tw1" cx="80%" cy="97%" r="1" opacity="0.55" />
+        <svg x="100%" y="0" overflow="visible">
+          <g class="orbit-scale">
+            <g class="orbit">
+              <circle class="orbit__path" r="280" />
+              <circle class="orbit__path orbit__path--outer" r="430" />
+              <circle class="star star--teal" cx="-242" cy="140" r="3" />
+              <circle class="star star--magenta" cx="-215" cy="372" r="2.4" />
+            </g>
+          </g>
+        </svg>
+        <svg x="0" y="100%" overflow="visible">
+          <g class="orbit-scale">
+            <g class="orbit orbit--reverse">
+              <circle class="orbit__path" r="240" />
+              <circle class="orbit__path orbit__path--outer" r="390" />
+              <circle class="star star--amber" cx="208" cy="-120" r="3" />
+              <circle class="star star--teal" cx="133" cy="-366" r="2" />
+            </g>
+          </g>
+        </svg>
+      </svg>
+    </div>
+
     <div id="app" aria-live="polite">
       <!-- Boot ------------------------------------------------------------->
       <section class="screen is-active" data-screen="boot">
@@ -75,7 +133,6 @@
                 name="displayName"
                 maxlength="24"
                 autocomplete="nickname"
-                placeholder="e.g. Karsh"
                 required
               />
             </label>
@@ -140,10 +197,10 @@
                     <th>#</th>
                     <th>Player</th>
                     <th>Overall</th>
-                    <th>Current&nbsp;Events</th>
-                    <th>Science</th>
-                    <th>Geography</th>
-                    <th>General&nbsp;Knowledge</th>
+                    <th title="Current Events"><span class="lb-long">Current Events</span><span class="lb-short" aria-hidden="true">News</span></th>
+                    <th title="Science"><span class="lb-long">Science</span><span class="lb-short" aria-hidden="true">Sci</span></th>
+                    <th title="Geography"><span class="lb-long">Geography</span><span class="lb-short" aria-hidden="true">Geo</span></th>
+                    <th title="General Knowledge"><span class="lb-long">General Knowledge</span><span class="lb-short" aria-hidden="true">Gen</span></th>
                   </tr>
                 </thead>
                 <tbody data-role="home-leaderboard-body"></tbody>
@@ -172,10 +229,10 @@
                 <th>#</th>
                 <th>Player</th>
                 <th>Overall</th>
-                <th>Current&nbsp;Events</th>
-                <th>Science</th>
-                <th>Geography</th>
-                <th>General&nbsp;Knowledge</th>
+                <th title="Current Events"><span class="lb-long">Current Events</span><span class="lb-short" aria-hidden="true">News</span></th>
+                <th title="Science"><span class="lb-long">Science</span><span class="lb-short" aria-hidden="true">Sci</span></th>
+                <th title="Geography"><span class="lb-long">Geography</span><span class="lb-short" aria-hidden="true">Geo</span></th>
+                <th title="General Knowledge"><span class="lb-long">General Knowledge</span><span class="lb-short" aria-hidden="true">Gen</span></th>
               </tr>
             </thead>
             <tbody data-role="history-leaderboard-body"></tbody>

@@ -1,11 +1,12 @@
 import { queryRows } from '../db/index.js';
 import { CATEGORIES } from '../lib/config.js';
 import { badRequest } from '../lib/http.js';
+import { todayGameDay, recentGameDays, gameDayBounds } from '../lib/day.js';
 
 /**
  * leaderboardService — the permanent home-screen leaderboard.
  *
- * Ranking is for one UTC calendar day at a time — points a player earned
+ * Ranking is for one game-timezone calendar day (see lib/day.js) at a time — points a player earned
  * that specific day, summed from the `score_events` ledger — rather than an
  * all-time total, so the board reflects "today," not whoever has played the
  * longest. Each row is broken out by category. History only reaches back
@@ -16,28 +17,18 @@ import { badRequest } from '../lib/http.js';
 
 export const HISTORY_DAYS = 5;
 
-export function todayUtc() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-/** The most recent `HISTORY_DAYS` UTC calendar days, today first. */
-export function recentUtcDays(count = HISTORY_DAYS) {
-  const days = [];
-  const now = new Date();
-  for (let i = 0; i < count; i += 1) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
-    days.push(d.toISOString().slice(0, 10));
-  }
-  return days;
+/** The most recent `HISTORY_DAYS` game days, today first. */
+export function recentDays(count = HISTORY_DAYS) {
+  return recentGameDays(count);
 }
 
 const isDayString = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 /** Validates and normalises a `day` query param against the retained window. */
 export function parseHistoryDay(value) {
-  if (value === undefined || value === null || value === '') return todayUtc();
+  if (value === undefined || value === null || value === '') return todayGameDay();
   if (!isDayString(value)) throw badRequest('day must be a date in YYYY-MM-DD form.');
-  const available = recentUtcDays();
+  const available = recentDays();
   if (!available.includes(value)) {
     throw badRequest(`day must be one of the last ${HISTORY_DAYS} days: ${available.join(', ')}.`);
   }
@@ -61,14 +52,13 @@ function shapeRow(row) {
 
 /**
  * @param {object} opts
- * @param {string} [opts.day]  UTC day (YYYY-MM-DD); defaults to today.
+ * @param {string} [opts.day]  Game day (YYYY-MM-DD); defaults to today.
  * @param {string|null} opts.viewerId
  * @param {number} opts.limit  How many top rows to return (the "11th row" for
  *   the viewer, when they fall outside this slice, is returned separately).
  */
-export async function getDayLeaderboard({ day = todayUtc(), viewerId = null, limit = 10 } = {}) {
-  const start = new Date(`${day}T00:00:00.000Z`);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+export async function getDayLeaderboard({ day = todayGameDay(), viewerId = null, limit = 10 } = {}) {
+  const { start, end } = gameDayBounds(day);
 
   const rows = await queryRows(
     `SELECT p.id, p.display_name, d.total_score,

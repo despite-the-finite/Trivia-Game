@@ -29,6 +29,8 @@ const PROVIDERS = {
   'general-knowledge': generalKnowledgeProvider,
 };
 
+const REFRESH_GRACE_MS = 2 * 60 * 60 * 1000;
+
 /** Guards against two instances refreshing the same category at once. */
 const inFlight = new Map();
 
@@ -72,7 +74,37 @@ export async function needsRefresh(category) {
   const status = await poolStatus(category);
   if (status.total < Math.max(policy.targetPool * 0.4, 20)) return true;
   if (!status.lastRefreshAt) return true;
-  return Date.now() - new Date(status.lastRefreshAt).valueOf() >= policy.refreshEveryMs;
+  // The daily cron fires at local midnight, which is 23 or 25 hours after the
+  // previous one across a daylight-saving change, and cron start times jitter.
+  // A small grace keeps a slightly-early run from being skipped as "fresh".
+  return Date.now() - new Date(status.lastRefreshAt).valueOf() >= policy.refreshEveryMs - REFRESH_GRACE_MS;
+}
+
+/** Fewest source documents worth generating from; below this, reuse is allowed. */
+const MIN_FRESH_DOCUMENTS = 6;
+
+/**
+ * Drops source documents that already produced questions in the last 30 days,
+ * so the same article is not asked about twice under different wording (a
+ * reworded question gets a new fingerprint and would slip past the duplicate
+ * check). If that leaves too little to work with, previously-used documents
+ * top the list back up: reused material beats an empty refresh, which would
+ * just be retried on every read.
+ */
+async function preferUnusedSources(category, documents, limit) {
+  if (category === 'geography') return documents; // templates over datasets, no articles
+
+  const used = await queryRows(
+    `SELECT DISTINCT source_url FROM questions
+      WHERE category = $1 AND generated_at > NOW() - INTERVAL '30 days'`,
+    [category],
+  );
+  const usedUrls = new Set(used.map((r) => r.source_url));
+  const unused = documents.filter((doc) => !usedUrls.has(doc.url));
+  if (unused.length >= Math.min(MIN_FRESH_DOCUMENTS, documents.length)) return unused;
+
+  const reused = documents.filter((doc) => usedUrls.has(doc.url));
+  return [...unused, ...reused].slice(0, limit);
 }
 
 async function persistSourceDocuments(client, documents) {
@@ -165,17 +197,19 @@ export async function refreshCategory(category, { force = false } = {}) {
     );
 
     try {
-      const documents = await provider.collect({ limit: policy.batchSize });
-      if (!documents.length) throw new Error(`${provider.name} returned no usable source material`);
+      const collected = await provider.collect({ limit: policy.batchSize });
+      if (!collected.length) throw new Error(`${provider.name} returned no usable source material`);
+      const documents = await preferUnusedSources(category, collected, policy.batchSize);
 
       const storedDocs = await withTransaction((client) =>
         persistSourceDocuments(client, documents),
       );
 
-      // Skip questions we already have, so a refresh adds new material rather
-      // than re-generating the same facts.
+      // Skip questions we have ever generated recently — expired ones included —
+      // so a refresh adds new material rather than re-generating the same facts.
       const existing = await queryRows(
-        'SELECT fingerprint FROM questions WHERE category = $1 AND active',
+        `SELECT fingerprint FROM questions
+          WHERE category = $1 AND generated_at > NOW() - INTERVAL '60 days'`,
         [category],
       );
       const seenFingerprints = new Set(existing.map((r) => r.fingerprint));

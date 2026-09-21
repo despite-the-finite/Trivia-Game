@@ -1,5 +1,6 @@
 import { fetchJson } from '../lib/fetchUtil.js';
 import { sha256 } from '../lib/ids.js';
+import { todayGameDay } from '../lib/day.js';
 
 /**
  * generalKnowledgeProvider — factual source material for evergreen trivia
@@ -15,9 +16,9 @@ import { sha256 } from '../lib/ids.js';
 const ENDPOINT_TYPES = ['events', 'births', 'deaths'];
 
 function todayMonthDay() {
-  const now = new Date();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
+  // The game day, not the UTC date, so the "On This Day" material matches the
+  // quiz day players are actually in.
+  const [, month, day] = todayGameDay().split('-');
   return { month, day };
 }
 

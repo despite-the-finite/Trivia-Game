@@ -20,18 +20,20 @@ Absolute rules:
 1. Use ONLY the supplied source material. Do not use anything you know from training, and do not infer facts that are not stated.
 2. If a document does not contain a clean, checkable fact, skip it. Producing fewer good questions is always better than padding.
 3. Every question must have exactly one objectively correct answer that a knowledgeable person would not dispute.
-4. Provide exactly four answer options. The three wrong options must be plausible, of similar length and specificity to the correct one, and clearly wrong given the source.
+4. Provide exactly four answer options. The three wrong options must be plausible, of similar length and specificity to the correct one, and clearly wrong given the source. Make them distinct kinds of answer, not near-misses: never use adjacent numbers, neighbouring years or slight variants of the correct answer as distractors.
 5. The question must stand on its own. A player cannot see the source, so never write "according to the article", "the report says", "the passage", or similar.
 6. Never use relative dates ("yesterday", "today", "last night"). Use absolute dates or no date.
 7. Avoid anything opinion-based, speculative, rumoured, predictive, or a politically contested interpretation. Prefer who/what/where/how-many facts that were reported as settled.
 8. Never use "all of the above", "none of the above", or similar meta-options.
 9. Set sourceId to the id of the single document the question came from.
 10. The explanation is one or two sentences stating the fact plainly, without referring to the source document as a document.
-11. Set difficulty to "easy", "medium" or "hard", based only on how well-known or precise the fact is:
-    - easy: the headline fact itself (who, what, where in broad terms).
-    - medium: a specific but clearly stated detail (a number, a date, a named person or place mentioned once).
-    - hard: a precise or easy-to-overlook detail (an exact figure, a minor named entity, a secondary fact).
-    Difficulty must never come from ambiguity, trick wording or obscure phrasing — every question stays clearly answerable from the source regardless of its difficulty. Aim for a roughly even mix of the three across the batch.`;
+11. Write for a curious general audience, not specialists. Prefer the big, memorable point of a story over fine print, use everyday wording instead of jargon (or explain the term in the question), and pick answer options a reasonable person could reason toward.
+12. Set difficulty to "easy", "medium" or "hard", based only on how well-known or precise the fact is:
+    - easy: the headline fact itself (who, what, where in broad terms), answerable by most adults.
+    - medium: a specific but clearly stated detail (a named person or place, a simple comparison).
+    - hard: a precise or easy-to-overlook detail (an exact figure, a minor named entity, a secondary fact). Use sparingly.
+    Difficulty must never come from ambiguity, trick wording or obscure phrasing — every question stays clearly answerable from the source regardless of its difficulty. Aim for about half easy, a third medium and no more than one in six hard across the batch.
+13. Spread the batch across different subjects. Do not write more than one question on the same topic, event or organism, even if several documents cover it.`;
 
 const QUESTION_SCHEMA = {
   type: 'object',
@@ -101,7 +103,7 @@ export async function generateFromDocuments(
   const prompt = [
     `Category: ${label}`,
     `Write up to ${count} questions total, at most 2 per source document.`,
-    'Aim for roughly a third easy, a third medium and a third hard (see the difficulty rule above).',
+    'Aim for about half easy, a third medium and at most one in six hard (see the difficulty rules above), and keep the subjects varied.',
     '',
     renderDocuments(documents),
     '',

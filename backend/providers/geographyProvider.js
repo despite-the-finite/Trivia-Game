@@ -1,5 +1,6 @@
 import { fetchJson, settleAll } from '../lib/fetchUtil.js';
 import { sha256 } from '../lib/ids.js';
+import { todayGameDay } from '../lib/day.js';
 
 /**
  * geographyProvider — structured, authoritative geographic data.
@@ -278,7 +279,7 @@ export async function collect() {
     facts: { datasetId: dataset.id, recordCount: records.length, records },
     // Checksum includes the row count so a materially changed snapshot is
     // stored as a new document rather than silently deduplicated away.
-    checksum: sha256(`geographyProvider|${dataset.id}|${records.length}|${now.toISOString().slice(0, 10)}`),
+    checksum: sha256(`geographyProvider|${dataset.id}|${records.length}|${todayGameDay()}`),
   }));
 }
 

@@ -55,24 +55,44 @@ export async function pickQuestions({
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 
-/** Splits `count` into DIFFICULTIES.length shares that differ by at most one. */
-function difficultyShares(count) {
-  const base = Math.floor(count / DIFFICULTIES.length);
-  const remainder = count % DIFFICULTIES.length;
-  return DIFFICULTIES.map((_, i) => base + (i < remainder ? 1 : 0));
+/**
+ * Share of each quiz drawn from each tier. Weighted toward easy on purpose: a
+ * day's quiz should feel winnable, with one or two genuine stretch questions
+ * rather than a third of the set being hard.
+ */
+export const DIFFICULTY_MIX = { easy: 0.5, medium: 0.35, hard: 0.15 };
+
+/**
+ * Splits `count` across DIFFICULTIES by DIFFICULTY_MIX (largest-remainder, so
+ * the shares always sum to `count`). Ties go to the easier tier.
+ */
+export function difficultyShares(count) {
+  const exact = DIFFICULTIES.map((d) => count * DIFFICULTY_MIX[d]);
+  const shares = exact.map(Math.floor);
+  let remaining = count - shares.reduce((a, b) => a + b, 0);
+  const byRemainder = exact
+    .map((value, i) => ({ i, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (remaining <= 0) break;
+    shares[i] += 1;
+    remaining -= 1;
+  }
+  return shares;
 }
 
 /**
- * Picks `count` questions from one category with a roughly even spread across
- * easy/medium/hard, so a day's quiz never reads as uniformly difficult. Falls
- * back to any difficulty to top up a tier that is running short.
+ * Picks `count` questions from one category following DIFFICULTY_MIX. A tier
+ * that is running short is topped up from the next-easiest tier first, then
+ * from anything, so a thin bank never makes the quiz harder than it has to be.
  */
 async function pickDifficultyBalanced({ category, count, excludeIds = [] }) {
   const used = new Set(excludeIds);
   const collected = [];
   const shares = difficultyShares(count);
 
-  for (const [i, difficulty] of shuffle(DIFFICULTIES).entries()) {
+  for (const [i, difficulty] of DIFFICULTIES.entries()) {
+    if (!shares[i]) continue;
     const rows = await pickQuestions({ category, count: shares[i], excludeIds: [...used], difficulty });
     for (const row of rows) {
       used.add(row.id);
@@ -80,13 +100,18 @@ async function pickDifficultyBalanced({ category, count, excludeIds = [] }) {
     }
   }
 
-  if (collected.length < count) {
+  for (const difficulty of [...DIFFICULTIES, null]) {
+    if (collected.length >= count) break;
     const filler = await pickQuestions({
       category,
       count: count - collected.length,
       excludeIds: [...used],
+      difficulty,
     });
-    collected.push(...filler);
+    for (const row of filler) {
+      used.add(row.id);
+      collected.push(row);
+    }
   }
 
   return shuffle(collected).slice(0, count);

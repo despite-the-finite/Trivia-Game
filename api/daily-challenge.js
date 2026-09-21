@@ -5,7 +5,7 @@ import { PLAYABLE_CATEGORIES, LIMITS } from '../backend/lib/config.js';
 import {
   getDailyStatus,
   startDaily,
-  todayUtc,
+  todayGameDay,
 } from '../backend/services/dailyChallengeService.js';
 import { getDailyLeaderboard } from '../backend/services/leaderboardService.js';
 
@@ -28,14 +28,14 @@ function readCategory(value) {
  *   POST /api/daily-challenge                       start (or resume) today's attempt
  *
  * Every category (including 'mixed', the original Daily Challenge) gets the
- * same ~10 questions for a given UTC day, in the same order, with the same
+ * same ~10 questions for a given game day (Mountain time), in the same order, with the same
  * answer placement. The first completed attempt per player is scored; further
  * plays that day are practice runs.
  */
 export default createHandler({
   async GET(req) {
     const q = getQuery(req);
-    const day = isDay(q.day) ? q.day : todayUtc();
+    const day = isDay(q.day) ? q.day : todayGameDay();
     const category = readCategory(q.category);
 
     if (q.view === 'leaderboard') {

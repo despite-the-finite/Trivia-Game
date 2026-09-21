@@ -7,8 +7,12 @@
   },
   "crons": [
     {
-      "path": "/api/cron/refresh",
-      "schedule": "0 0 * * *"
+      "path": "/api/cron/refresh?trigger=mdt",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/refresh?trigger=mst",
+      "schedule": "0 7 * * *"
     }
   ],
   "rewrites": [

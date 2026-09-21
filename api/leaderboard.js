@@ -1,12 +1,12 @@
 import { createHandler, getQuery } from '../backend/lib/http.js';
 import { optionalPlayer } from '../backend/lib/auth.js';
-import { getDayLeaderboard, parseHistoryDay, recentUtcDays } from '../backend/services/leaderboardService.js';
+import { getDayLeaderboard, parseHistoryDay, recentDays } from '../backend/services/leaderboardService.js';
 
 /**
  * GET /api/leaderboard?day=YYYY-MM-DD&limit=
  *
- * The permanent home-screen leaderboard: the top players for one UTC
- * calendar day (points earned that day), each broken out by category.
+ * The permanent home-screen leaderboard: the top players for one game
+ * calendar day (Mountain time) (points earned that day), each broken out by category.
  * `day` defaults to today and must be one of the last few retained days
  * (see `availableDays` in the response, or `HISTORY_DAYS`) — this is a
  * short rolling window for browsing recent days, not an all-time archive.
@@ -21,6 +21,6 @@ export default createHandler({
     const limit = Math.min(Math.max(Number.parseInt(q.limit ?? '10', 10) || 10, 1), 50);
 
     const board = await getDayLeaderboard({ day, viewerId: viewer?.id ?? null, limit });
-    return { ...board, availableDays: recentUtcDays() };
+    return { ...board, availableDays: recentDays() };
   },
 });

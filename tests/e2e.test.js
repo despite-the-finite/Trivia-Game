@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
+import { todayGameDay } from '../backend/lib/day.js';
 
 /**
  * End-to-end test against a real Postgres and the real API handlers.
@@ -330,7 +331,7 @@ describe("the leaderboard ranks today's score and breaks it out by category", as
     method: 'POST', token: karsh.body.token, body: { sessionId: run.body.session.id },
   });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayGameDay();
   const board = await call('/api/leaderboard?limit=10');
   assert.equal(board.status, 200);
   assert.equal(board.body.day, today, 'defaults to today when no day is given');

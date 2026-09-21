@@ -82,6 +82,12 @@ export const GAME = {
   dailyQuestionCount: int(process.env.DAILY_QUESTION_COUNT, 10),
   /** How long an unfinished session may be resumed / answered into. */
   sessionTtlMs: int(process.env.SESSION_TTL_MS, 2 * 60 * 60 * 1000),
+  /**
+   * IANA timezone whose midnight ends the game day: the daily quizzes roll
+   * over, leaderboards reset and content refreshes then. Defaults to Mountain
+   * time (handles daylight saving).
+   */
+  timezone: process.env.GAME_TIMEZONE || 'America/Denver',
 };
 
 /**
