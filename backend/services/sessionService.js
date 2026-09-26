@@ -16,7 +16,9 @@ import { applyAnswerToStats, applyGameCompletion } from './playerService.js';
  */
 
 export function normalizeCategory(value) {
-  if (value === undefined || value === null || value === '') return 'mixed';
+  if (value === undefined || value === null || value === '') {
+    throw badRequest(`category is required. Expected one of: ${PLAYABLE_CATEGORIES.join(', ')}.`);
+  }
   const v = String(value).toLowerCase();
   if (!PLAYABLE_CATEGORIES.includes(v)) {
     throw badRequest(`Unknown category. Expected one of: ${PLAYABLE_CATEGORIES.join(', ')}.`);

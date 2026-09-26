@@ -61,13 +61,9 @@ export class TriviaService {
   }
 
   /** Starts (or resumes) the given category's fixed quiz for today. */
-  async startCategoryQuiz(category = 'mixed') {
+  async startCategoryQuiz(category) {
     const payload = await this.api.post('/daily-challenge', {}, { category });
     return this.adopt(payload);
-  }
-
-  async startDailyChallenge() {
-    return this.startCategoryQuiz('mixed');
   }
 
   async resume(sessionId) {
@@ -124,12 +120,8 @@ export class TriviaService {
     return data.questions;
   }
 
-  async dailyStatus(category = 'mixed') {
+  async dailyStatus(category) {
     return this.api.get('/daily-challenge', { category });
-  }
-
-  async dailyLeaderboard(category = 'mixed') {
-    return this.api.get('/daily-challenge', { view: 'leaderboard', category });
   }
 }
 

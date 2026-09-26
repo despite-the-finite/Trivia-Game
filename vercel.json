@@ -13,6 +13,10 @@
     {
       "path": "/api/cron/refresh?trigger=mst",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/refresh?trigger=retry",
+      "schedule": "0 8 * * *"
     }
   ],
   "rewrites": [

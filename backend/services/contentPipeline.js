@@ -1,5 +1,5 @@
 import { query, queryOne, queryRows, withTransaction, withAdvisoryLock, lockKey } from '../db/index.js';
-import { CATEGORIES, FRESHNESS } from '../lib/config.js';
+import { CATEGORIES, FRESHNESS, GAME } from '../lib/config.js';
 import newsProvider from '../providers/newsProvider.js';
 import scienceProvider from '../providers/scienceProvider.js';
 import geographyProvider from '../providers/geographyProvider.js';
@@ -81,7 +81,8 @@ export async function poolStatus(category) {
 export async function needsRefresh(category) {
   const policy = FRESHNESS[category];
   const status = await poolStatus(category);
-  if (status.total < Math.max(policy.targetPool * 0.4, 20)) return true;
+  // Too few live questions to build a day's quiz: refresh regardless of age.
+  if (status.total < GAME.dailyQuestionCount) return true;
   if (!status.lastRefreshAt) return true;
   // The daily cron fires at local midnight, which is 23 or 25 hours after the
   // previous one across a daylight-saving change, and cron start times jitter.

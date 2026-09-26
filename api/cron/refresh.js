@@ -9,11 +9,12 @@ import { refreshDueCategories, refreshCategory, poolStatus } from '../../backend
  *
  * The scheduled entry point for content generation, run at midnight in the game
  * timezone (Mountain time). Vercel Cron only speaks UTC, and Mountain midnight is
- * 06:00 UTC in summer but 07:00 UTC in winter, so vercel.json fires at both
- * times. The one at local midnight does the refresh; the one an hour later
- * (local 1am) is a retry — categories that refreshed are still fresh and skip,
- * so it only redoes one whose midnight run failed or was cut off by the
- * function time limit. Vercel Cron calls this with the `Authorization: Bearer $CRON_SECRET` header (see vercel.json).
+ * 06:00 UTC in summer but 07:00 UTC in winter, so vercel.json fires at 06:00,
+ * 07:00 and 08:00 UTC. Whichever lands at local midnight does the refresh; the
+ * ones after it (local 1am and 2am in summer, 1am in winter) are retries —
+ * categories that refreshed are still fresh and skip, so a retry only redoes
+ * one whose earlier run failed or was cut off by the function time limit. The
+ * winter 06:00 UTC trigger lands at 11pm the previous day and is skipped. Vercel Cron calls this with the `Authorization: Bearer $CRON_SECRET` header (see vercel.json).
  * Every category refreshes once every 24 hours, so a single daily trigger
  * covers all of them; each category still decides for itself whether it is due
  * using the freshness policy in config.js.
@@ -43,8 +44,8 @@ export default createHandler({
     const force = q.force === '1' || q.force === 'true';
 
     // A manual run (?force or ?category) always goes ahead; a scheduled one only
-    // in the first two hours of the local day (midnight run + 1am retry).
-    if (!force && !q.category && gameHourNow() > 1) {
+    // in the first three hours of the local day (midnight run + retries).
+    if (!force && !q.category && gameHourNow() > 2) {
       return { skipped: true, reason: `not the refresh window in ${GAME.timezone}`, ranAt: new Date().toISOString() };
     }
 

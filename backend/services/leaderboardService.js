@@ -94,7 +94,7 @@ export async function getDayLeaderboard({ day = todayGameDay(), viewerId = null,
 }
 
 /** Leaderboard for one day's quiz (any category): score, accuracy, completion time. */
-export async function getDailyLeaderboard({ day, category = 'mixed', viewerId, limit = 50 }) {
+export async function getDailyLeaderboard({ day, category, viewerId, limit = 50 }) {
   const rows = await queryRows(
     `SELECT p.id, p.display_name, s.total_score, s.correct_count,
             array_length(s.question_ids, 1) AS total,

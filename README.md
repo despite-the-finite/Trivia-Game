@@ -58,8 +58,7 @@ tamper with.
 **Every category is one shared quiz a day.** There are no difficulty tiers and no
 per-play random draw. Each category materialises a single fixed set of questions
 once every 24 hours (midnight Mountain time), and every player who plays that category that day gets
-exactly those questions in exactly that order — the same mechanism the original
-Daily Challenge used, just applied per category. A player's first completed
+exactly those questions in exactly that order. A player's first completed
 attempt at a day's quiz is the one that counts for stats and leaderboards; playing
 it again afterward is a practice run.
 
@@ -86,8 +85,10 @@ static frontend, so `vercel deploy` works with no build step. Set `DATABASE_URL`
 (use a **pooled** connection string), `ANTHROPIC_API_KEY`, `PUBLIC_BASE_URL` and
 `CRON_SECRET`. `vercel.json` registers the content-refresh cron for midnight Mountain time. Vercel
 Cron is UTC-only and Mountain midnight is 06:00 UTC in summer but 07:00 UTC in
-winter, so it fires at both and `/api/cron/refresh` runs only the one that is
-actually local midnight; each category then decides for itself whether it is due.
+winter, so it fires at 06:00, 07:00 and 08:00 UTC and `/api/cron/refresh` acts
+only on runs between local midnight and 2am. The first refreshes; later ones
+are retries that only redo a category whose earlier run failed or was cut off,
+since each category decides for itself whether it is due.
 
 Any Postgres works — Neon, Supabase, RDS, or a local server.
 
@@ -151,10 +152,9 @@ rather than guessing.
 
 ### Avoiding repeats
 
-A new day's quiz excludes every question used by any quiz in the previous 7 days
-and by the other categories' quizzes the same day, so Mixed never re-asks what a
-category quiz just did. If the bank is too thin to fill a quiz that way, the
-window narrows step by step rather than failing. At refresh time, source
+A new day's quiz excludes every question used by that category's quizzes in the
+previous 7 days. If the bank is too thin to fill a quiz that way, repeats are
+allowed rather than failing. At refresh time, source
 documents that already produced questions in the last 30 days are skipped (a
 reworded question about the same article would otherwise get a new fingerprint
 and slip through), and duplicate detection looks back 60 days including expired
@@ -234,7 +234,7 @@ creation; only its SHA-256 is stored.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/trivia` | Read-only preview of the question bank (`category`, `count`) — not used by the frontend, useful for admins/tests. Redacted by default; the full record (with `correctAnswer`, `explanation`, provenance) requires an `X-Admin-Key` header |
-| `GET/POST /api/daily-challenge` | `?category=` selects the category's quiz (default `mixed`, the original Daily Challenge). GET returns today's status, POST starts or resumes today's attempt, `?view=leaderboard` returns its board |
+| `GET/POST /api/daily-challenge` | `?category=` selects the category's quiz (required: `current-events`, `science`, `geography` or `general-knowledge`). GET returns today's status, POST starts or resumes today's attempt, `?view=leaderboard` returns its board |
 | `POST /api/session` | `?action=finish` (or a body with `sessionId`) finalises a run and returns the summary |
 | `GET /api/session?id=` | Resume a run, or `&view=review` for the per-question review |
 | `POST /api/answer` | Submit one answer; returns correctness, points, explanation and source |
@@ -255,11 +255,12 @@ undo the anti-cheat model, so the browser gets the redacted shape.
 ## Categories and the daily quiz
 
 There are four categories — Current Events, Science, Geography and General
-Knowledge — plus Mixed, which draws an even spread across all four. Each one is
+Knowledge. Each one is
 materialised once per Mountain-time day into a fixed set of questions in a fixed order,
 seeded deterministically from the date and category, so everyone who plays a
-given category that day gets an identical test. Mixed is the original Daily
-Challenge; the other four are what "Quick Play" now means.
+given category that day gets an identical test. Each daily refresh generates
+13 questions per category: the day's 10-question quiz plus headroom for
+validation rejects.
 
 A player's first completed attempt at a day's quiz is the scored one — it is
 what counts toward stats and the leaderboard. Playing the same quiz again that
@@ -296,7 +297,7 @@ stats elsewhere read further back than 5 days.
 
 There is no head-to-head matchmaking and no friends list — "Invite" and
 "Invite a friend" just hand out a link to the app itself, so whoever opens it
-plays that category's or the Daily Challenge's shared quiz for the day and
+plays that category's shared quiz for the day and
 shows up on the leaderboard next to you. Sharing uses the Web Share API where
 it exists (the OS sheet: Messages, WhatsApp, Mail) and falls back to copying
 the link.

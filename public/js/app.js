@@ -104,14 +104,8 @@ async function boot() {
   await enterApp();
 }
 
-/** Post-sign-in routing: honour a direct link to the daily quiz, otherwise go home. */
+/** Post-sign-in routing: everything lands on home. */
 async function enterApp() {
-  if (window.location.pathname === '/daily') {
-    await renderHome();
-    await startDaily();
-    return;
-  }
-
   await renderHome();
 }
 
@@ -136,18 +130,13 @@ async function renderHome() {
     renderHomeStats(stats);
   });
 
-  guarded(async () => {
-    const daily = await triviaService.dailyStatus();
-    renderDailyCard(daily);
-  });
-
   guarded(() => renderCategoryCompletion());
 
   guarded(() => renderHomeLeaderboard());
 }
 
-/** Quick-play categories (everything except the combined 'mixed' Daily Challenge). */
-const QUICK_PLAY_CATEGORIES = Object.keys(CATEGORY_LABELS).filter((c) => c !== 'mixed');
+/** Quick-play categories — each has its own fixed daily quiz. */
+const QUICK_PLAY_CATEGORIES = Object.keys(CATEGORY_LABELS);
 
 /** Ticks off each category chip whose quiz the player has already completed today. */
 async function renderCategoryCompletion() {
@@ -173,37 +162,6 @@ function renderHomeStats(stats) {
 
 const statTile = (value, label) =>
   el('div', { class: 'stat' }, [el('strong', { text: value }), el('span', { text: label })]);
-
-function renderDailyCard(daily) {
-  const card = $('[data-action="play-daily"]');
-  if (!card) return;
-
-  if (daily.played) {
-    card.classList.add('is-done');
-    setText('daily-title', `You scored ${formatNumber(daily.yourResult.score)}`);
-    setText(
-      'daily-meta',
-      `${daily.yourResult.correct}/${daily.yourResult.total} correct · tap to see the board`,
-    );
-    card.dataset.state = 'played';
-  } else if (daily.inProgress) {
-    card.classList.remove('is-done');
-    setText('daily-title', 'Finish today’s challenge');
-    setText('daily-meta', `${daily.questionCount} questions · already started`);
-    card.dataset.state = 'resume';
-  } else {
-    card.classList.remove('is-done');
-    setText('daily-title', `Today's ${daily.questionCount} questions`);
-    const played = daily.globalStats.playersCompleted;
-    setText(
-      'daily-meta',
-      played
-        ? `${formatNumber(played)} played · average ${formatNumber(daily.globalStats.averageScore)}`
-        : 'Everyone plays the same set',
-    );
-    card.dataset.state = 'new';
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Game loop
@@ -462,79 +420,6 @@ async function startCategoryQuiz() {
   renderQuestion();
 }
 
-async function startDaily() {
-  const status = await guarded(() => triviaService.dailyStatus());
-  if (!status) return;
-
-  if (status.played) {
-    await openDailyBoard(status);
-    return;
-  }
-
-  showScreen('boot');
-  const started = await guarded(() => triviaService.startDailyChallenge(), {
-    onError: (err) => {
-      toast(err.message);
-      showScreen('home');
-    },
-  });
-  if (!started) return;
-  showScreen('game');
-  renderQuestion();
-}
-
-async function openDailyBoard(status) {
-  const data = await guarded(() => triviaService.dailyLeaderboard());
-  if (!data) return;
-
-  showScreen('daily-board');
-  const panel = clear(role('daily-board-panel'));
-  panel.append(
-    el('h2', { class: 'panel__title', text: `Daily Challenge · ${status.day}` }),
-    el('p', {
-      class: 'panel__body',
-      text: `You scored ${formatNumber(status.yourResult.score)} — ${status.yourResult.correct}/${status.yourResult.total} correct.`,
-    }),
-    el('button', {
-      class: 'btn btn--primary btn--block',
-      text: 'SHARE MY SCORE',
-      onClick: () => shareDaily(status),
-    }),
-  );
-
-  const list = el('ol', { class: 'board' });
-  for (const entry of data.entries.slice(0, 25)) {
-    list.append(
-      el('li', { class: `board__row${entry.isViewer ? ' is-you' : ''}` }, [
-        el('span', { class: 'board__rank', text: `${entry.rank}` }),
-        el('span', { class: 'board__name' }, [
-          el('div', { text: entry.displayName }),
-          el('div', {
-            class: 'board__meta',
-            text: `${entry.accuracy}% · ${formatSeconds(entry.completionMs)}`,
-          }),
-        ]),
-        el('span', { class: 'board__value', text: formatNumber(entry.score) }),
-      ]),
-    );
-  }
-  if (!data.entries.length) {
-    list.append(el('li', { class: 'empty', text: 'Nobody has finished today yet.' }));
-  }
-  panel.append(el('h3', { class: 'section__title', text: "Today's board" }), list);
-}
-
-async function shareDaily(status) {
-  const text = ShareService.dailyText({
-    score: status.yourResult.score,
-    correct: status.yourResult.correct,
-    total: status.yourResult.total,
-  });
-  const outcome = await ShareService.share({ text, url: status.shareUrl || window.location.origin });
-  if (outcome === 'copied') toast('Copied — paste it anywhere.');
-  if (outcome === 'failed') toast('Could not share on this device.');
-}
-
 // ---------------------------------------------------------------------------
 // Inviting friends
 // ---------------------------------------------------------------------------
@@ -711,9 +596,6 @@ function bindEvents() {
         break;
       case 'play-quick':
         await startCategoryQuiz();
-        break;
-      case 'play-daily':
-        await startDaily();
         break;
       case 'next-question':
         advance();
