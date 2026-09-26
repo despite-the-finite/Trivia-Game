@@ -10,8 +10,10 @@ import { refreshDueCategories, refreshCategory, poolStatus } from '../../backend
  * The scheduled entry point for content generation, run at midnight in the game
  * timezone (Mountain time). Vercel Cron only speaks UTC, and Mountain midnight is
  * 06:00 UTC in summer but 07:00 UTC in winter, so vercel.json fires at both
- * times and this handler runs only the one that is actually local midnight
- * (the other returns `skipped`). Vercel Cron calls this with the `Authorization: Bearer $CRON_SECRET` header (see vercel.json).
+ * times. The one at local midnight does the refresh; the one an hour later
+ * (local 1am) is a retry — categories that refreshed are still fresh and skip,
+ * so it only redoes one whose midnight run failed or was cut off by the
+ * function time limit. Vercel Cron calls this with the `Authorization: Bearer $CRON_SECRET` header (see vercel.json).
  * Every category refreshes once every 24 hours, so a single daily trigger
  * covers all of them; each category still decides for itself whether it is due
  * using the freshness policy in config.js.
@@ -41,9 +43,9 @@ export default createHandler({
     const force = q.force === '1' || q.force === 'true';
 
     // A manual run (?force or ?category) always goes ahead; a scheduled one only
-    // at local midnight, so the two UTC triggers never both refresh.
-    if (!force && !q.category && gameHourNow() !== 0) {
-      return { skipped: true, reason: `not midnight in ${GAME.timezone}`, ranAt: new Date().toISOString() };
+    // in the first two hours of the local day (midnight run + 1am retry).
+    if (!force && !q.category && gameHourNow() > 1) {
+      return { skipped: true, reason: `not the refresh window in ${GAME.timezone}`, ranAt: new Date().toISOString() };
     }
 
     const results =
