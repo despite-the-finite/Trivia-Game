@@ -1332,39 +1332,6 @@ body[data-view='home'] .ambient {
 .screen[data-screen='home'] .stack > * + * {
   margin-top: 28px;
 }
-.screen[data-screen='home'] .card--daily {
-  position: relative;
-  overflow: hidden;
-  padding: 20px 22px;
-  background: linear-gradient(135deg, rgba(124, 77, 255, 0.18) 0%, rgba(19, 14, 34, 0.7) 62%);
-  border: 1px solid rgba(124, 77, 255, 0.42);
-  border-radius: 14px;
-  transition: transform 0.16s var(--ease-out), border-color 0.2s, box-shadow 0.2s;
-}
-.screen[data-screen='home'] .card--daily:hover {
-  border-color: rgba(154, 120, 255, 0.8);
-  box-shadow: 0 0 34px -14px rgba(124, 77, 255, 0.85);
-  transform: translateY(-1px);
-}
-.screen[data-screen='home'] .card--daily:active {
-  transform: scale(0.99);
-}
-.screen[data-screen='home'] .card--daily::after {
-  content: '';
-  position: absolute;
-  top: 22px;
-  right: 22px;
-  width: 7px;
-  height: 7px;
-  background: var(--accent3);
-  box-shadow: 0 0 10px rgba(47, 224, 199, 0.6);
-  transform: rotate(45deg);
-  pointer-events: none;
-}
-.screen[data-screen='home'] .card--daily.is-done {
-  background: rgba(19, 14, 34, 0.6);
-  border-color: var(--surface-border);
-}
 .screen[data-screen='home'] .card__label {
   font-family: var(--font-mono);
   font-size: 11px;

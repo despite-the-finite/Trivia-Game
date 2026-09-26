@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   player_id      UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   mode           TEXT        NOT NULL,        -- daily
-  category       TEXT        NOT NULL,        -- includes 'mixed'
+  category       TEXT        NOT NULL,        -- current-events | science | geography | general-knowledge
   question_ids   UUID[]      NOT NULL,
   answer_orders  JSONB       NOT NULL,        -- { [questionId]: [canonicalIndex, ...] }
   daily_date     DATE,
@@ -245,9 +245,9 @@ CREATE INDEX IF NOT EXISTS score_events_player_idx
 DROP TABLE IF EXISTS challenge_participants CASCADE;
 DROP TABLE IF EXISTS challenges CASCADE;
 
--- One fixed, shared question set per (UTC day, category) — 'mixed' is the
--- original global Daily Challenge; every other category is that category's
--- own daily quiz (see dailyChallengeService).
+-- One fixed, shared question set per (game day, category): each category's
+-- own daily quiz (see dailyChallengeService). Rows with category 'mixed' are
+-- from the retired combined Daily Challenge.
 CREATE TABLE IF NOT EXISTS daily_challenges (
   day           DATE        NOT NULL,
   category      TEXT        NOT NULL DEFAULT 'mixed',

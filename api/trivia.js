@@ -32,7 +32,7 @@ export default createHandler({
   async GET(req) {
     const q = getQuery(req);
 
-    const category = (q.category ?? 'mixed').toLowerCase();
+    const category = String(q.category ?? '').toLowerCase();
     if (!PLAYABLE_CATEGORIES.includes(category)) {
       throw badRequest(`category must be one of: ${PLAYABLE_CATEGORIES.join(', ')}.`);
     }
@@ -45,7 +45,7 @@ export default createHandler({
     const includeAnswers = isAdminRequest(req);
 
     // Keep the bank topped up without making this request wait for it.
-    const categories = category === 'mixed' ? PLAYABLE_CATEGORIES.filter((c) => c !== 'mixed') : [category];
+    const categories = [category];
     for (const cat of categories) {
       needsRefresh(cat)
         .then((stale) => stale && refreshInBackground(cat))

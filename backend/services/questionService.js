@@ -24,14 +24,13 @@ export function isCategory(value) {
  * lightly preferring the less-served ones so the bank gets even coverage.
  */
 export async function pickQuestions({
-  category = 'mixed',
+  category,
   count = 10,
   excludeIds = [],
   difficulty = null,
 } = {}) {
   if (count <= 0) return [];
-  const categories = category === 'mixed' ? CATEGORIES : [category];
-  const params = [categories, count, excludeIds.length ? excludeIds : null, difficulty];
+  const params = [[category], count, excludeIds.length ? excludeIds : null, difficulty];
 
   const rows = await queryRows(
     `SELECT id, category, question, answers, correct_index, explanation,
@@ -117,43 +116,9 @@ async function pickDifficultyBalanced({ category, count, excludeIds = [] }) {
   return shuffle(collected).slice(0, count);
 }
 
-/**
- * Builds a balanced set: for `mixed` we want an even spread across categories
- * rather than whatever the bank happens to be heaviest in, and within every
- * category (mixed or not) an even spread across difficulty.
- */
+/** Builds a category's set with an even spread across difficulty. */
 export async function pickBalancedSet({ category, count, excludeIds = [] }) {
-  if (category !== 'mixed') {
-    return pickDifficultyBalanced({ category, count, excludeIds });
-  }
-
-  const perCategory = Math.ceil(count / CATEGORIES.length);
-  const collected = [];
-  const used = new Set(excludeIds);
-
-  for (const cat of shuffle(CATEGORIES)) {
-    const rows = await pickDifficultyBalanced({
-      category: cat,
-      count: perCategory,
-      excludeIds: [...used],
-    });
-    for (const row of rows) {
-      used.add(row.id);
-      collected.push(row);
-    }
-  }
-
-  // Top up from anywhere if a category was short.
-  if (collected.length < count) {
-    const filler = await pickQuestions({
-      category: 'mixed',
-      count: count - collected.length,
-      excludeIds: [...used],
-    });
-    collected.push(...filler);
-  }
-
-  return shuffle(collected).slice(0, count);
+  return pickDifficultyBalanced({ category, count, excludeIds });
 }
 
 export async function getQuestionsByIds(ids) {

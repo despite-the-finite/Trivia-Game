@@ -9,48 +9,44 @@ const int = (value, fallback) => {
 };
 
 export const CATEGORIES = ['current-events', 'science', 'geography', 'general-knowledge'];
-export const PLAYABLE_CATEGORIES = [...CATEGORIES, 'mixed'];
+export const PLAYABLE_CATEGORIES = CATEGORIES;
 
 export const CATEGORY_LABELS = {
   'current-events': 'Current Events',
   science: 'Science',
   geography: 'Geography',
   'general-knowledge': 'General Knowledge',
-  mixed: 'Mixed',
 };
 
 /**
- * Freshness policy per category. Every category now materializes one fixed,
- * shared question set per UTC day (see dailyChallengeService), so `targetPool`
- * only needs to comfortably cover that day's quiz plus validation attrition —
- * not a large rotating bank. `ttlMs` is kept a little above `refreshEveryMs` as
- * a safety buffer; `refreshEveryMs` is how often the pipeline re-gathers source
- * material.
+ * Freshness policy per category. Every category materializes one fixed, shared
+ * 10-question quiz per game day (see dailyChallengeService), so each daily
+ * refresh only generates `batchSize` (13) questions: the day's quiz plus a
+ * little headroom for validation attrition. Keeping the batch small keeps each
+ * refresh's LLM call well inside the function time limit. `ttlMs` is kept
+ * above `refreshEveryMs` as a safety buffer; `refreshEveryMs` is how often the
+ * pipeline re-gathers source material.
  */
 export const FRESHNESS = {
   'current-events': {
     refreshEveryMs: int(process.env.REFRESH_CURRENT_EVENTS_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_CURRENT_EVENTS_MS, 48 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_CURRENT_EVENTS, 20),
-    batchSize: int(process.env.BATCH_CURRENT_EVENTS, 30),
+    batchSize: int(process.env.BATCH_CURRENT_EVENTS, 13),
   },
   science: {
     refreshEveryMs: int(process.env.REFRESH_SCIENCE_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_SCIENCE_MS, 48 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_SCIENCE, 20),
-    batchSize: int(process.env.BATCH_SCIENCE, 30),
+    batchSize: int(process.env.BATCH_SCIENCE, 13),
   },
   geography: {
     refreshEveryMs: int(process.env.REFRESH_GEOGRAPHY_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_GEOGRAPHY_MS, 48 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_GEOGRAPHY, 20),
-    batchSize: int(process.env.BATCH_GEOGRAPHY, 30),
+    batchSize: int(process.env.BATCH_GEOGRAPHY, 13),
   },
   'general-knowledge': {
     refreshEveryMs: int(process.env.REFRESH_GENERAL_KNOWLEDGE_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_GENERAL_KNOWLEDGE_MS, 48 * 60 * 60 * 1000),
-    targetPool: int(process.env.POOL_GENERAL_KNOWLEDGE, 20),
-    batchSize: int(process.env.BATCH_GENERAL_KNOWLEDGE, 30),
+    batchSize: int(process.env.BATCH_GENERAL_KNOWLEDGE, 13),
   },
 };
 

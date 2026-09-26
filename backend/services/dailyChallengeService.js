@@ -9,9 +9,8 @@ import { createFixedSession, shapeSessionForPlay } from './sessionService.js';
 /**
  * dailyChallengeService — one fixed, shared question set per (game day, category).
  *
- * `category: 'mixed'` is the original global Daily Challenge; every other
- * category is that category's own daily quiz — this is what "Quick Play" now
- * means. The day's set is materialised once, on first request, and every
+ * Each category has its own daily quiz — this is what "Quick Play" means.
+ * The day's set is materialised once, on first request, and every
  * player gets exactly those questions in exactly that order. Answer placement
  * is derived from a seed of the date + category, so it is identical for
  * everyone and reproducible.
@@ -29,37 +28,29 @@ export { todayGameDay };
 /** How many past days of quizzes a new quiz avoids repeating questions from. */
 export const NO_REPEAT_DAYS = 7;
 
-/**
- * Question ids already used by other quizzes: every category's quiz for the
- * previous NO_REPEAT_DAYS days, and the other categories' quizzes for `day`
- * itself (so the Mixed quiz never re-asks what a category quiz just did).
- * `sameDayOnly` narrows that to the second half, as a fallback for a bank too
- * thin to satisfy the full window.
- */
-async function recentlyUsedIds(day, category, { sameDayOnly = false } = {}) {
+/** Question ids used by this category's quizzes over the previous NO_REPEAT_DAYS days. */
+async function recentlyUsedIds(day, category) {
   const rows = await queryRows(
     `SELECT DISTINCT unnest(question_ids) AS id
        FROM daily_challenges
-      WHERE NOT (day = $1::date AND category = $2)
-        AND day <= $1::date
+      WHERE category = $2
+        AND day < $1::date
         AND day >= $1::date - ($3 || ' days')::interval`,
-    [day, category, String(sameDayOnly ? 0 : NO_REPEAT_DAYS)],
+    [day, category, String(NO_REPEAT_DAYS)],
   );
   return rows.map((r) => r.id);
 }
 
 /**
  * Picks a day's set while avoiding repeats. If the bank is too thin to fill a
- * quiz without them, the window narrows step by step rather than failing — a
- * repeated question is better than no quiz.
+ * quiz without them, repeats are allowed rather than failing — a repeated
+ * question is better than no quiz.
  */
 async function pickFreshSet(day, category) {
   const count = GAME.dailyQuestionCount;
-  for (const sameDayOnly of [false, true]) {
-    const excludeIds = await recentlyUsedIds(day, category, { sameDayOnly });
-    const questions = await pickBalancedSet({ category, count, excludeIds });
-    if (questions.length >= count) return questions;
-  }
+  const excludeIds = await recentlyUsedIds(day, category);
+  const questions = await pickBalancedSet({ category, count, excludeIds });
+  if (questions.length >= count) return questions;
   return pickBalancedSet({ category, count });
 }
 
@@ -108,7 +99,7 @@ async function materialiseDay(day, category) {
   return row;
 }
 
-export async function getDailyStatus(player, category = 'mixed', day = todayGameDay()) {
+export async function getDailyStatus(player, category, day = todayGameDay()) {
   const daily = await materialiseDay(day, category);
 
   const attempt = player
@@ -146,7 +137,7 @@ export async function getDailyStatus(player, category = 'mixed', day = todayGame
         }
       : null,
     globalStats: { playersCompleted: stats.players, averageScore: stats.average_score },
-    shareUrl: `${APP.publicUrl || ''}/daily`,
+    shareUrl: APP.publicUrl || '',
   };
 }
 
@@ -155,7 +146,7 @@ export async function getDailyStatus(player, category = 'mixed', day = todayGame
  * progress. Once the scored attempt is completed, further plays that day are
  * practice runs: scored for immediate feedback but never counted twice.
  */
-export async function startDaily(player, category = 'mixed', day = todayGameDay()) {
+export async function startDaily(player, category, day = todayGameDay()) {
   const daily = await materialiseDay(day, category);
 
   const scored = await queryOne(
@@ -206,10 +197,4 @@ export async function startDaily(player, category = 'mixed', day = todayGameDay(
     isPractice: true,
   });
   return { ...playable, day };
-}
-
-export function buildDailyShareText({ score, correct, total, day, category = 'mixed' }) {
-  const url = `${APP.publicUrl || ''}/daily`;
-  const label = category === 'mixed' ? 'Daily Trivia Challenge' : `${category} quiz`;
-  return `I scored ${score.toLocaleString('en-US')} on the ${day} ${label} (${correct}/${total} correct). Can you beat me?\n${url}`;
 }

@@ -12,7 +12,9 @@ import { getDailyLeaderboard } from '../backend/services/leaderboardService.js';
 const isDay = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 function readCategory(value) {
-  if (value === undefined || value === null || value === '') return 'mixed';
+  if (value === undefined || value === null || value === '') {
+    throw badRequest(`category is required. Expected one of: ${PLAYABLE_CATEGORIES.join(', ')}.`);
+  }
   const category = String(value).toLowerCase();
   if (!PLAYABLE_CATEGORIES.includes(category)) {
     throw badRequest(`category must be one of: ${PLAYABLE_CATEGORIES.join(', ')}.`);
@@ -27,7 +29,7 @@ function readCategory(value) {
  *   GET  /api/daily-challenge?view=leaderboard      today's board for that category
  *   POST /api/daily-challenge                       start (or resume) today's attempt
  *
- * Every category (including 'mixed', the original Daily Challenge) gets the
+ * Every category gets the
  * same ~10 questions for a given game day (Mountain time), in the same order, with the same
  * answer placement. The first completed attempt per player is scored; further
  * plays that day are practice runs.

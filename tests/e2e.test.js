@@ -372,8 +372,8 @@ describe('the daily challenge is identical for everyone and scored once', async 
   const one = await call('/api/player', { method: 'POST', body: { displayName: 'DailyOne' } });
   const two = await call('/api/player', { method: 'POST', body: { displayName: 'DailyTwo' } });
 
-  const runOne = await call('/api/daily-challenge', { method: 'POST', token: one.body.token });
-  const runTwo = await call('/api/daily-challenge', { method: 'POST', token: two.body.token });
+  const runOne = await call('/api/daily-challenge?category=geography', { method: 'POST', token: one.body.token });
+  const runTwo = await call('/api/daily-challenge?category=geography', { method: 'POST', token: two.body.token });
   assert.equal(runOne.status, 201);
 
   assert.deepEqual(
@@ -398,15 +398,15 @@ describe('the daily challenge is identical for everyone and scored once', async 
     method: 'POST', token: one.body.token, body: { sessionId: runOne.body.session.id },
   });
 
-  const replay = await call('/api/daily-challenge', { method: 'POST', token: one.body.token });
+  const replay = await call('/api/daily-challenge?category=geography', { method: 'POST', token: one.body.token });
   assert.equal(replay.status, 201, 'a replay after completion is allowed, but as practice');
   assert.equal(replay.body.session.isPractice, true, 'the daily challenge is scored once per player');
 
-  const status = await call('/api/daily-challenge', { token: one.body.token });
+  const status = await call('/api/daily-challenge?category=geography', { token: one.body.token });
   assert.equal(status.body.played, true);
   assert.ok(status.body.yourResult.score >= 0);
 
-  const board = await call('/api/daily-challenge?view=leaderboard');
+  const board = await call('/api/daily-challenge?view=leaderboard&category=geography');
   assert.equal(board.status, 200);
   assert.ok(board.body.entries.length >= 1);
   assert.ok('completionMs' in board.body.entries[0]);
@@ -441,4 +441,12 @@ describe('unauthenticated gameplay is refused', async () => {
   assert.equal(session.status, 401);
   const answer = await call('/api/answer', { method: 'POST', body: {} });
   assert.equal(answer.status, 401);
+});
+
+describe('there is no combined Mixed quiz: a category is required', async () => {
+  const player = await call('/api/player', { method: 'POST', body: { displayName: 'NoMixed' } });
+  const missing = await call('/api/daily-challenge', { method: 'POST', token: player.body.token });
+  assert.equal(missing.status, 400);
+  const mixed = await call('/api/daily-challenge?category=mixed', { token: player.body.token });
+  assert.equal(mixed.status, 400);
 });
