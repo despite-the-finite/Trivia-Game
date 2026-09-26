@@ -31,6 +31,12 @@ const PROVIDERS = {
 
 const REFRESH_GRACE_MS = 2 * 60 * 60 * 1000;
 
+/**
+ * A run still marked 'running' after this long was killed mid-flight (e.g. the
+ * serverless function hit its time limit) and will never finish.
+ */
+const ABANDONED_RUN_MS = 15 * 60 * 1000;
+
 /** Guards against two instances refreshing the same category at once. */
 const inFlight = new Map();
 
@@ -51,9 +57,12 @@ export async function poolStatus(category) {
       WHERE category = $1 AND active AND expires_at > NOW()`,
     [category],
   );
+  // Only a run that actually finished counts. A run killed mid-flight stays
+  // 'running' forever; counting it would mark the category fresh for a day
+  // without a single new question having been stored.
   const lastRun = await queryOne(
     `SELECT started_at, status FROM refresh_runs
-      WHERE category = $1 AND status <> 'error'
+      WHERE category = $1 AND status = 'ok'
       ORDER BY started_at DESC LIMIT 1`,
     [category],
   );
@@ -184,6 +193,16 @@ export async function refreshCategory(category, { force = false } = {}) {
 
   const lock = lockKey(`refresh:${category}`);
   const { acquired, result } = await withAdvisoryLock(lock, async () => {
+    // Holding the lock means no run for this category is live anywhere, so any
+    // old 'running' row was abandoned. Close it out so the log reads truthfully.
+    await query(
+      `UPDATE refresh_runs
+          SET finished_at = NOW(), status = 'error', error = 'abandoned: run did not finish'
+        WHERE category = $1 AND status = 'running'
+          AND started_at < NOW() - ($2 || ' milliseconds')::interval`,
+      [category, String(ABANDONED_RUN_MS)],
+    );
+
     if (!force && !(await needsRefresh(category))) {
       return { skipped: true, reason: 'fresh' };
     }
@@ -306,19 +325,25 @@ export function refreshInBackground(category) {
   return promise;
 }
 
-/** Refresh every category whose policy says it is due. Used by the cron job. */
+/**
+ * Refresh every category whose policy says it is due. Used by the cron job.
+ *
+ * Categories run concurrently: each one is dominated by a long LLM call, and
+ * run back to back they overran the function's time limit, so only the first
+ * category or two ever got new questions. One lock connection per category
+ * stays well inside the pool.
+ */
 export async function refreshDueCategories({ force = false } = {}) {
-  const results = [];
-  for (const category of CATEGORIES) {
-    if (category !== 'geography' && !isLlmEnabled()) {
-      results.push({ category, skipped: true, reason: 'llm-not-configured' });
-      continue;
-    }
-    try {
-      results.push(await refreshCategory(category, { force }));
-    } catch (err) {
-      results.push({ category, error: err.message });
-    }
-  }
-  return results;
+  return Promise.all(
+    CATEGORIES.map(async (category) => {
+      if (category !== 'geography' && !isLlmEnabled()) {
+        return { category, skipped: true, reason: 'llm-not-configured' };
+      }
+      try {
+        return await refreshCategory(category, { force });
+      } catch (err) {
+        return { category, error: err.message };
+      }
+    }),
+  );
 }

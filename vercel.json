@@ -3,6 +3,9 @@
   "functions": {
     "api/**/*.js": {
       "maxDuration": 60
+    },
+    "api/cron/refresh.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
