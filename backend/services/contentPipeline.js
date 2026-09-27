@@ -4,6 +4,7 @@ import newsProvider from '../providers/newsProvider.js';
 import scienceProvider from '../providers/scienceProvider.js';
 import geographyProvider from '../providers/geographyProvider.js';
 import generalKnowledgeProvider from '../providers/generalKnowledgeProvider.js';
+import entertainmentProvider from '../providers/entertainmentProvider.js';
 import { generateFromDocuments, generateGeography } from './questionGenerator.js';
 import { isLlmEnabled } from './llm.js';
 
@@ -27,6 +28,7 @@ const PROVIDERS = {
   science: scienceProvider,
   geography: geographyProvider,
   'general-knowledge': generalKnowledgeProvider,
+  entertainment: entertainmentProvider,
 };
 
 const REFRESH_GRACE_MS = 2 * 60 * 60 * 1000;

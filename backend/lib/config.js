@@ -8,7 +8,7 @@ const int = (value, fallback) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-export const CATEGORIES = ['current-events', 'science', 'geography', 'general-knowledge'];
+export const CATEGORIES = ['current-events', 'science', 'geography', 'general-knowledge', 'entertainment'];
 export const PLAYABLE_CATEGORIES = CATEGORIES;
 
 export const CATEGORY_LABELS = {
@@ -16,13 +16,14 @@ export const CATEGORY_LABELS = {
   science: 'Science',
   geography: 'Geography',
   'general-knowledge': 'General Knowledge',
+  entertainment: 'Entertainment',
 };
 
 /**
  * Freshness policy per category. Every category materializes one fixed, shared
- * 10-question quiz per game day (see dailyChallengeService), so each daily
- * refresh only generates `batchSize` (13) questions: the day's quiz plus a
- * little headroom for validation attrition. Keeping the batch small keeps each
+ * 5-question quiz per game day (see dailyChallengeService), so each daily
+ * refresh only generates `batchSize` (9) questions: the day's quiz plus four
+ * spares to stand in for any the validator rejects. Keeping the batch small keeps each
  * refresh's LLM call well inside the function time limit. `ttlMs` is kept
  * above `refreshEveryMs` as a safety buffer; `refreshEveryMs` is how often the
  * pipeline re-gathers source material.
@@ -31,22 +32,27 @@ export const FRESHNESS = {
   'current-events': {
     refreshEveryMs: int(process.env.REFRESH_CURRENT_EVENTS_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_CURRENT_EVENTS_MS, 48 * 60 * 60 * 1000),
-    batchSize: int(process.env.BATCH_CURRENT_EVENTS, 13),
+    batchSize: int(process.env.BATCH_CURRENT_EVENTS, 9),
   },
   science: {
     refreshEveryMs: int(process.env.REFRESH_SCIENCE_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_SCIENCE_MS, 48 * 60 * 60 * 1000),
-    batchSize: int(process.env.BATCH_SCIENCE, 13),
+    batchSize: int(process.env.BATCH_SCIENCE, 9),
   },
   geography: {
     refreshEveryMs: int(process.env.REFRESH_GEOGRAPHY_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_GEOGRAPHY_MS, 48 * 60 * 60 * 1000),
-    batchSize: int(process.env.BATCH_GEOGRAPHY, 13),
+    batchSize: int(process.env.BATCH_GEOGRAPHY, 9),
   },
   'general-knowledge': {
     refreshEveryMs: int(process.env.REFRESH_GENERAL_KNOWLEDGE_MS, 24 * 60 * 60 * 1000), // 24 hours
     ttlMs: int(process.env.TTL_GENERAL_KNOWLEDGE_MS, 48 * 60 * 60 * 1000),
-    batchSize: int(process.env.BATCH_GENERAL_KNOWLEDGE, 13),
+    batchSize: int(process.env.BATCH_GENERAL_KNOWLEDGE, 9),
+  },
+  entertainment: {
+    refreshEveryMs: int(process.env.REFRESH_ENTERTAINMENT_MS, 24 * 60 * 60 * 1000), // 24 hours
+    ttlMs: int(process.env.TTL_ENTERTAINMENT_MS, 48 * 60 * 60 * 1000),
+    batchSize: int(process.env.BATCH_ENTERTAINMENT, 9),
   },
 };
 
@@ -75,7 +81,7 @@ export const SCORING = {
 export const GAME = {
   defaultQuestionCount: int(process.env.DEFAULT_QUESTION_COUNT, 10),
   maxQuestionCount: int(process.env.MAX_QUESTION_COUNT, 20),
-  dailyQuestionCount: int(process.env.DAILY_QUESTION_COUNT, 10),
+  dailyQuestionCount: int(process.env.DAILY_QUESTION_COUNT, 5),
   /** How long an unfinished session may be resumed / answered into. */
   sessionTtlMs: int(process.env.SESSION_TTL_MS, 2 * 60 * 60 * 1000),
   /**

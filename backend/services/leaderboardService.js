@@ -46,6 +46,7 @@ function shapeRow(row) {
       science: row.science_score,
       geography: row.geography_score,
       'general-knowledge': row.general_knowledge_score,
+      entertainment: row.entertainment_score,
     },
   };
 }
@@ -63,6 +64,7 @@ export async function getDayLeaderboard({ day = todayGameDay(), viewerId = null,
   const rows = await queryRows(
     `SELECT p.id, p.display_name, d.total_score,
             d.current_events_score, d.science_score, d.geography_score, d.general_knowledge_score,
+            d.entertainment_score,
             RANK() OVER (ORDER BY d.total_score DESC) AS rank
        FROM (
          SELECT player_id,
@@ -70,7 +72,8 @@ export async function getDayLeaderboard({ day = todayGameDay(), viewerId = null,
                 COALESCE(SUM(points) FILTER (WHERE category = 'current-events'), 0)::int    AS current_events_score,
                 COALESCE(SUM(points) FILTER (WHERE category = 'science'), 0)::int           AS science_score,
                 COALESCE(SUM(points) FILTER (WHERE category = 'geography'), 0)::int         AS geography_score,
-                COALESCE(SUM(points) FILTER (WHERE category = 'general-knowledge'), 0)::int AS general_knowledge_score
+                COALESCE(SUM(points) FILTER (WHERE category = 'general-knowledge'), 0)::int AS general_knowledge_score,
+                COALESCE(SUM(points) FILTER (WHERE category = 'entertainment'), 0)::int     AS entertainment_score
            FROM score_events
           WHERE created_at >= $1 AND created_at < $2
           GROUP BY player_id

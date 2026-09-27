@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS player_stats (
   science_score        BIGINT  NOT NULL DEFAULT 0,
   geography_score      BIGINT  NOT NULL DEFAULT 0,
   general_knowledge_score BIGINT NOT NULL DEFAULT 0,
+  entertainment_score  BIGINT  NOT NULL DEFAULT 0,
   best_game_score      INTEGER NOT NULL DEFAULT 0,
   best_game_accuracy   NUMERIC(5,2) NOT NULL DEFAULT 0,
   best_daily_score     INTEGER NOT NULL DEFAULT 0,
@@ -59,6 +60,13 @@ BEGIN
      WHERE table_name = 'player_stats' AND column_name = 'general_knowledge_score'
   ) THEN
     ALTER TABLE player_stats ADD COLUMN general_knowledge_score BIGINT NOT NULL DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'player_stats' AND column_name = 'entertainment_score'
+  ) THEN
+    ALTER TABLE player_stats ADD COLUMN entertainment_score BIGINT NOT NULL DEFAULT 0;
   END IF;
 END $$;
 
@@ -74,8 +82,8 @@ DROP TABLE IF EXISTS friendships CASCADE;
 
 CREATE TABLE IF NOT EXISTS source_documents (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider      TEXT        NOT NULL,          -- newsProvider | scienceProvider | geographyProvider | generalKnowledgeProvider
-  category      TEXT        NOT NULL,          -- current-events | science | geography | general-knowledge
+  provider      TEXT        NOT NULL,          -- newsProvider | scienceProvider | geographyProvider | generalKnowledgeProvider | entertainmentProvider
+  category      TEXT        NOT NULL,          -- current-events | science | geography | general-knowledge | entertainment
   title         TEXT        NOT NULL,
   url           TEXT        NOT NULL,
   source_name   TEXT        NOT NULL,
@@ -90,7 +98,7 @@ CREATE INDEX IF NOT EXISTS source_documents_category_idx
 
 CREATE TABLE IF NOT EXISTS questions (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  category            TEXT        NOT NULL,   -- current-events | science | geography | general-knowledge
+  category            TEXT        NOT NULL,   -- current-events | science | geography | general-knowledge | entertainment
   question            TEXT        NOT NULL,
   answers             JSONB       NOT NULL,   -- canonical order; index 0 is NOT necessarily correct
   correct_index       INTEGER     NOT NULL,
@@ -175,7 +183,7 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   player_id      UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   mode           TEXT        NOT NULL,        -- daily
-  category       TEXT        NOT NULL,        -- current-events | science | geography | general-knowledge
+  category       TEXT        NOT NULL,        -- current-events | science | geography | general-knowledge | entertainment
   question_ids   UUID[]      NOT NULL,
   answer_orders  JSONB       NOT NULL,        -- { [questionId]: [canonicalIndex, ...] }
   daily_date     DATE,

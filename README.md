@@ -2,7 +2,7 @@
 
 A trivia platform whose questions are built from the live internet, not from a
 file in the JavaScript bundle. Questions about current events, science, world
-geography and general knowledge are generated server-side from cited sources,
+geography, general knowledge and entertainment are generated server-side from cited sources,
 validated, and cached. Scores and the leaderboard are all authoritative on the
 server.
 
@@ -23,7 +23,8 @@ everyone who plays it. Nobody has to ship a new build for new trivia to appear.
   scienceProvider              (source material         ambiguous,             table
   geographyProvider             only, never                unverifiable,       (cached,
   generalKnowledgeProvider      model knowledge)           duplicate            with TTL)
-   (geography: structured                                 or opinion
+  entertainmentProvider                                   or opinion
+   (geography: structured
     data, no model)                                                               │
                                                                                    ▼
                                                             dailyChallengeService: picks
@@ -40,7 +41,7 @@ Three ideas carry most of the design:
 **Facts and question-writing are separate jobs.** Providers fetch real source
 material — wire-service and public-broadcaster feeds for news, research-institution
 feeds for science, Wikidata for geography, Wikipedia's "On This Day" API for
-general knowledge — and store the title, URL, publisher and publication date.
+general knowledge, Wikipedia page summaries for entertainment — and store the title, URL, publisher and publication date.
 Only then is that material handed to a model, with instructions to write
 questions from it and nothing else. The model is never asked what is true.
 
@@ -99,16 +100,18 @@ Any Postgres works — Neon, Supabase, RDS, or a local server.
 Every category refreshes once every 24 hours and materialises one fixed quiz for
 that day — see [Categories and the daily quiz](#categories-and-the-daily-quiz).
 
-| Category | Refresh | Question TTL | Target pool | Source |
+| Category | Refresh | Question TTL | Batch | Source |
 |---|---|---|---|---|
-| Current Events | 24 h | 48 h | 20 | Reuters, AP, BBC, NPR, Al Jazeera, CBC, Guardian |
-| Science | 24 h | 48 h | 20 | NASA, ESA, Nature, Phys.org, ScienceDaily, MIT News, Science News, Live Science, USGS and others |
-| Geography | 24 h | 48 h | 20 | Wikidata |
-| General Knowledge | 24 h | 48 h | 20 | Wikipedia "On This Day" |
+| Current Events | 24 h | 48 h | 9 | Reuters, AP, BBC, NPR, Al Jazeera, CBC, Guardian |
+| Science | 24 h | 48 h | 9 | NASA, ESA, Nature, Phys.org, ScienceDaily, MIT News, Science News, Live Science, USGS and others |
+| Geography | 24 h | 48 h | 9 | Wikidata |
+| General Knowledge | 24 h | 48 h | 9 | Wikipedia "On This Day" |
+| Entertainment | 24 h | 48 h | 9 | Wikipedia (curated mainstream titles + most-read articles) |
 
 Every value is overridable by environment variable — see `.env.example`. The
-target pool is small on purpose: each refresh only needs to comfortably cover
-that day's ~10-question quiz, not a large rotating bank.
+batch is small on purpose: each refresh only needs to cover that day's
+5-question quiz plus four spares for validation rejects, not a large rotating
+bank.
 
 Science pulls from space agencies (NASA, ESA) alongside topic-specific feeds
 for physics, chemistry, biology, health, earth science and technology. Every
@@ -127,6 +130,15 @@ served from what is already there.
 Feeds are configurable: set `NEWS_FEEDS` / `SCIENCE_FEEDS` to a comma-separated
 list of `Name|url` pairs to use your own sources. General Knowledge sources from
 Wikipedia's "On This Day" API and has no feed override.
+
+Entertainment keeps to mainstream TV, film, video games, music and animation.
+`entertainmentProvider` draws Wikipedia page summaries from two pools: a
+curated list of widely known shows, films, games, artists and franchises
+(walked a window at a time, so consecutive days cover different titles), and
+the previous day's most-read Wikipedia articles whose short description marks
+them as entertainment. Each batch is built round-robin across media, with
+trending articles held to 40% of it, so no single medium — Hollywood films
+included — can fill a quiz on its own.
 
 ---
 
@@ -234,7 +246,7 @@ creation; only its SHA-256 is stored.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/trivia` | Read-only preview of the question bank (`category`, `count`) — not used by the frontend, useful for admins/tests. Redacted by default; the full record (with `correctAnswer`, `explanation`, provenance) requires an `X-Admin-Key` header |
-| `GET/POST /api/daily-challenge` | `?category=` selects the category's quiz (required: `current-events`, `science`, `geography` or `general-knowledge`). GET returns today's status, POST starts or resumes today's attempt, `?view=leaderboard` returns its board |
+| `GET/POST /api/daily-challenge` | `?category=` selects the category's quiz (required: `current-events`, `science`, `geography`, `general-knowledge` or `entertainment`). GET returns today's status, POST starts or resumes today's attempt, `?view=leaderboard` returns its board |
 | `POST /api/session` | `?action=finish` (or a body with `sessionId`) finalises a run and returns the summary |
 | `GET /api/session?id=` | Resume a run, or `&view=review` for the per-question review |
 | `POST /api/answer` | Submit one answer; returns correctness, points, explanation and source |
@@ -254,13 +266,13 @@ undo the anti-cheat model, so the browser gets the redacted shape.
 
 ## Categories and the daily quiz
 
-There are four categories — Current Events, Science, Geography and General
-Knowledge. Each one is
+There are five categories — Current Events, Science, Geography, General
+Knowledge and Entertainment. Each one is
 materialised once per Mountain-time day into a fixed set of questions in a fixed order,
 seeded deterministically from the date and category, so everyone who plays a
 given category that day gets an identical test. Each daily refresh generates
-13 questions per category: the day's 10-question quiz plus headroom for
-validation rejects.
+9 questions per category: the day's 5-question quiz plus four spares that
+stand in for any questions the validator rejects.
 
 A player's first completed attempt at a day's quiz is the scored one — it is
 what counts toward stats and the leaderboard. Playing the same quiz again that
@@ -274,7 +286,7 @@ for everyone until midnight.
 There is one board, permanently visible on the home screen: the top 10 players
 for **today** (Mountain time), ranked by points earned that calendar day, each row
 broken out by category (Current Events, Science, Geography, General
-Knowledge) so a player's strengths are visible at a glance. It is computed
+Knowledge, Entertainment) so a player's strengths are visible at a glance. It is computed
 from the `score_events` ledger filtered to that day — not an all-time total —
 so the home board always reflects who's playing well today, not just whoever
 has played the longest.
@@ -324,7 +336,7 @@ backend/
   db/          schema.sql, pool, transactions, advisory locks
   lib/         config, http, auth, ids, rate limiting, fetch helpers
   providers/   newsProvider, scienceProvider, geographyProvider,
-               generalKnowledgeProvider
+               generalKnowledgeProvider, entertainmentProvider
   services/    contentPipeline, questionGenerator, questionValidator,
                geographyTemplates, questionService, scoringService,
                playerService, sessionService, leaderboardService,

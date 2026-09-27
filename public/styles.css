@@ -549,7 +549,7 @@ button {
 /* The leaderboard matrix always fits the screen — no sideways scrolling. Fixed
    layout plus explicit column widths give the player name whatever is left
    over; it truncates with an ellipsis instead of pushing the table wider. On
-   narrow screens the four category headers switch to short labels. */
+   narrow screens the five category headers switch to short labels. */
 .lbmatrix-scroll {
   overflow: hidden;
   border: 1px solid var(--surface-border);
@@ -577,12 +577,17 @@ button {
   padding-right: 8px;
 }
 .lbmatrix th:nth-child(1) { width: 32px; }
-.lbmatrix th:nth-child(3) { width: 16%; }
-.lbmatrix th:nth-child(n + 4) { width: 13%; }
+.lbmatrix th:nth-child(3) { width: 15%; }
+.lbmatrix th:nth-child(n + 4) { width: 11%; }
 .lb-long { display: none; }
 .lb-short { display: inline; }
-@media (max-width: 339px) {
+@media (max-width: 419px) {
   .lbmatrix { font-size: 11px; }
+  .lbmatrix th:nth-child(n + 3),
+  .lbmatrix td:nth-child(n + 3) { padding-left: 1px; padding-right: 1px; }
+}
+@media (max-width: 339px) {
+  .lbmatrix { font-size: 10px; }
 }
 @media (min-width: 540px) {
   .lbmatrix { font-size: 13px; }
@@ -593,8 +598,8 @@ button {
   .lbmatrix th:last-child,
   .lbmatrix td:last-child { padding-right: 12px; }
   .lbmatrix th:nth-child(1) { width: 44px; }
-  .lbmatrix th:nth-child(3) { width: 14%; }
-  .lbmatrix th:nth-child(n + 4) { width: 15%; }
+  .lbmatrix th:nth-child(3) { width: 13%; }
+  .lbmatrix th:nth-child(n + 4) { width: 12.5%; }
   .lb-long { display: inline; }
   .lb-short { display: none; }
   .lbmatrix thead th { white-space: normal; vertical-align: bottom; }

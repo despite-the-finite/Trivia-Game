@@ -130,6 +130,7 @@ export function shapeStats(stats, periods = {}) {
       science: stats.science_score,
       geography: stats.geography_score,
       'general-knowledge': stats.general_knowledge_score,
+      entertainment: stats.entertainment_score,
     },
     dailyScore: periods.daily ?? 0,
     weeklyScore: periods.weekly ?? 0,
@@ -150,6 +151,7 @@ function emptyStats() {
       total_score: 0, games_played: 0, questions_answered: 0, correct_answers: 0,
       incorrect_answers: 0, current_streak: 0, best_streak: 0, total_response_ms: 0,
       current_events_score: 0, science_score: 0, geography_score: 0, general_knowledge_score: 0,
+      entertainment_score: 0,
       best_game_score: 0, best_game_accuracy: 0, best_daily_score: 0,
     },
     {},
@@ -161,6 +163,7 @@ const CATEGORY_COLUMN = {
   science: 'science_score',
   geography: 'geography_score',
   'general-knowledge': 'general_knowledge_score',
+  entertainment: 'entertainment_score',
 };
 
 /**

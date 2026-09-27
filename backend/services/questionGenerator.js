@@ -35,6 +35,18 @@ Absolute rules:
     Difficulty must never come from ambiguity, trick wording or obscure phrasing — every question stays clearly answerable from the source regardless of its difficulty. Aim for about half easy, a third medium and no more than one in six hard across the batch.
 13. Spread the batch across different subjects. Do not write more than one question on the same topic, event or organism, even if several documents cover it.`;
 
+/**
+ * Extra, category-specific direction appended to the prompt. The absolute
+ * rules above still apply in full; this only steers subject matter and tone.
+ */
+const CATEGORY_GUIDANCE = {
+  entertainment: [
+    'Keep it mainstream: ask what a casual fan of TV, film, video games, music or animation would know or enjoy learning — main characters, famous creators and performers, settings, premises, landmark releases and record-setting achievements.',
+    'Cover several media across the batch, not just films, and never lean on Hollywood alone.',
+    'Avoid behind-the-scenes minutiae, box-office or sales figures to the exact amount, and anything that changes over time ("current", "latest", "most recent", "to date").',
+  ],
+};
+
 const QUESTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -92,7 +104,7 @@ export async function generateFromDocuments(
 ) {
   if (generate === generateJson && !isLlmEnabled()) {
     throw new Error(
-      'ANTHROPIC_API_KEY is not configured, so news and science questions cannot be generated.',
+      'ANTHROPIC_API_KEY is not configured, so source-based questions cannot be generated.',
     );
   }
   if (!documents.length) {
@@ -104,6 +116,7 @@ export async function generateFromDocuments(
     `Category: ${label}`,
     `Write up to ${count} questions total, at most 2 per source document.`,
     'Aim for about half easy, a third medium and at most one in six hard (see the difficulty rules above), and keep the subjects varied.',
+    ...(CATEGORY_GUIDANCE[category] ?? []),
     '',
     renderDocuments(documents),
     '',

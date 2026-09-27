@@ -30,7 +30,7 @@ function readCategory(value) {
  *   POST /api/daily-challenge                       start (or resume) today's attempt
  *
  * Every category gets the
- * same ~10 questions for a given game day (Mountain time), in the same order, with the same
+ * same ~5 questions for a given game day (Mountain time), in the same order, with the same
  * answer placement. The first completed attempt per player is scored; further
  * plays that day are practice runs.
  */

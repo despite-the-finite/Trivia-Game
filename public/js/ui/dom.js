@@ -54,6 +54,7 @@ export const CATEGORY_LABELS = {
   science: 'Science',
   geography: 'Geography',
   'general-knowledge': 'General Knowledge',
+  entertainment: 'Entertainment',
 };
 
 let toastTimer;
