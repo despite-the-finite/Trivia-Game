@@ -92,6 +92,63 @@ export async function needsRefresh(category) {
   return Date.now() - new Date(status.lastRefreshAt).valueOf() >= policy.refreshEveryMs - REFRESH_GRACE_MS;
 }
 
+/**
+ * How long a stored Wikidata snapshot is reused before geography goes back to
+ * Wikidata. Countries, peaks and rivers barely change, and the live queries are
+ * slow enough (five country queries back to back against a shared public
+ * endpoint) that the midnight run was being cut off by the function time limit
+ * — leaving the bank without new geography questions when the day's quiz was
+ * built, so the quiz repeated the previous day's.
+ */
+const GEOGRAPHY_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Latest stored copy of each geography dataset, newest first per dataset. */
+async function storedGeographySnapshot() {
+  const rows = await queryRows(
+    `SELECT DISTINCT ON (facts->>'datasetId')
+            id, provider, category, title, url, source_name, published_at, fetched_at, facts, checksum
+       FROM source_documents
+      WHERE provider = 'geographyProvider' AND facts ? 'records'
+      ORDER BY facts->>'datasetId', fetched_at DESC`,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    provider: r.provider,
+    category: r.category,
+    title: r.title,
+    url: r.url,
+    sourceName: r.source_name,
+    publishedAt: r.published_at,
+    fetchedAt: r.fetched_at,
+    facts: r.facts,
+    checksum: r.checksum,
+    stored: true,
+  }));
+}
+
+/**
+ * Geography source material: a recent stored snapshot when every dataset has
+ * one, otherwise a live Wikidata pull — and if that fails, whatever snapshot
+ * exists, however old. Stored documents carry `stored: true` so they are not
+ * re-persisted (which would bump their fetched_at and keep them "recent"
+ * forever).
+ */
+async function collectGeography(provider, options) {
+  const snapshot = await storedGeographySnapshot();
+  const cutoff = Date.now() - GEOGRAPHY_SNAPSHOT_MAX_AGE_MS;
+  const complete = snapshot.length >= 3;
+  if (complete && snapshot.every((doc) => new Date(doc.fetchedAt).valueOf() > cutoff)) {
+    return snapshot;
+  }
+  try {
+    return await provider.collect(options);
+  } catch (err) {
+    if (!snapshot.length) throw err;
+    console.warn(`[contentPipeline] Wikidata unavailable (${err.message}); using stored geography snapshot`);
+    return snapshot;
+  }
+}
+
 /** Fewest source documents worth generating from; below this, reuse is allowed. */
 const MIN_FRESH_DOCUMENTS = 6;
 
@@ -122,6 +179,10 @@ async function preferUnusedSources(category, documents, limit) {
 async function persistSourceDocuments(client, documents) {
   const stored = [];
   for (const doc of documents) {
+    if (doc.stored) {
+      stored.push(doc);
+      continue;
+    }
     const { rows } = await client.query(
       `INSERT INTO source_documents (provider, category, title, url, source_name, published_at, facts, checksum)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -219,7 +280,10 @@ export async function refreshCategory(category, { force = false } = {}) {
     );
 
     try {
-      const collected = await provider.collect({ limit: policy.batchSize });
+      const collected =
+        category === 'geography'
+          ? await collectGeography(provider, { limit: policy.batchSize })
+          : await provider.collect({ limit: policy.batchSize });
       if (!collected.length) throw new Error(`${provider.name} returned no usable source material`);
       const documents = await preferUnusedSources(category, collected, policy.batchSize);
 

@@ -165,8 +165,19 @@ rather than guessing.
 ### Avoiding repeats
 
 A new day's quiz excludes every question used by that category's quizzes in the
-previous 7 days. If the bank is too thin to fill a quiz that way, repeats are
-allowed rather than failing. At refresh time, source
+previous 7 days. If the bank is too thin to fill a quiz that way — typically
+because the first player of the day arrived before the midnight refresh
+finished — the category is refreshed on the spot (waiting up to 30 seconds, or
+for a refresh already under way), and only if it is still short are the
+missing slots filled with repeats. A quiz is fixed for the whole day once built,
+so this is the last chance to avoid locking in yesterday's questions.
+
+Geography reuses its stored Wikidata snapshot for up to 7 days instead of
+re-querying Wikidata every night (the dataset barely changes and the live
+queries are slow enough to hit the function time limit), and falls back to the
+last snapshot if Wikidata is down. A rephrased geography question keeps the
+fingerprint of its template wording, so the same fact is recognised as already
+asked however it was reworded. At refresh time, source
 documents that already produced questions in the last 30 days are skipped (a
 reworded question about the same article would otherwise get a new fingerprint
 and slip through), and duplicate detection looks back 60 days including expired

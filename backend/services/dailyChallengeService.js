@@ -5,6 +5,7 @@ import { todayGameDay } from '../lib/day.js';
 import { seededRandom } from '../lib/ids.js';
 import { pickBalancedSet, buildAnswerOrders, getQuestionsByIds } from './questionService.js';
 import { createFixedSession, shapeSessionForPlay } from './sessionService.js';
+import { refreshCategory } from './contentPipeline.js';
 
 /**
  * dailyChallengeService — one fixed, shared question set per (game day, category).
@@ -42,16 +43,71 @@ async function recentlyUsedIds(day, category) {
 }
 
 /**
- * Picks a day's set while avoiding repeats. If the bank is too thin to fill a
- * quiz without them, repeats are allowed rather than failing — a repeated
- * question is better than no quiz.
+ * How long a quiz build will wait on an inline refresh before settling for
+ * repeats. Kept well inside the 60s function limit.
+ */
+const INLINE_REFRESH_BUDGET_MS = 30_000;
+
+/**
+ * Runs a refresh for `category`, giving up after `ms`. If another instance is
+ * already refreshing it (typically the midnight cron), waits for that run to
+ * land instead. The first attempt is forced: the bank being short of unused
+ * questions is reason enough, whatever the freshness window says.
+ */
+async function refreshWithin(category, ms) {
+  const deadline = Date.now() + ms;
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  const attempt = async () => {
+    // Once another run has held the lock, stop forcing: its batch is the
+    // refresh we were after, and needsRefresh will see it once it lands.
+    let force = true;
+    while (Date.now() < deadline) {
+      const result = await refreshCategory(category, { force });
+      if (result?.reason !== 'locked-by-another-instance') return;
+      force = false;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  };
+  try {
+    await Promise.race([
+      attempt().catch((err) => {
+        console.warn(`[dailyChallenge] inline refresh for ${category} failed: ${err.message}`);
+      }),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Picks a day's set while avoiding repeats.
+ *
+ * A quiz is fixed for the whole day once built, so building it from a stale
+ * bank locks in repeats until midnight. If the bank has too few unused
+ * questions — usually because the first player arrived before the midnight
+ * refresh finished — refresh first. If it is still short, fill only the gap
+ * with repeats rather than throwing the no-repeat rule away for the whole set.
  */
 async function pickFreshSet(day, category) {
   const count = GAME.dailyQuestionCount;
   const excludeIds = await recentlyUsedIds(day, category);
-  const questions = await pickBalancedSet({ category, count, excludeIds });
+  let questions = await pickBalancedSet({ category, count, excludeIds });
   if (questions.length >= count) return questions;
-  return pickBalancedSet({ category, count });
+
+  await refreshWithin(category, INLINE_REFRESH_BUDGET_MS);
+  questions = await pickBalancedSet({ category, count, excludeIds });
+  if (questions.length >= count) return questions;
+
+  const topUp = await pickBalancedSet({
+    category,
+    count: count - questions.length,
+    excludeIds: questions.map((q) => q.id),
+  });
+  return [...questions, ...topUp];
 }
 
 async function materialiseDay(day, category) {

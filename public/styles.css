@@ -1416,3 +1416,524 @@ body[data-view='home'] .ambient {
 .screen[data-screen='home'] .lbmatrix tr.is-you td:first-child {
   box-shadow: inset 2px 0 0 var(--accent);
 }
+
+/* ==========================================================================
+   Category backdrops — game and results screens.
+
+   startCategoryQuiz() puts the quiz's category on <body data-category>, and
+   showScreen() the screen on <body data-view>. While a quiz (or its results)
+   is on screen, the matching scene from .backdrop fills the viewport behind
+   #app. Scenery keeps to the edges and stays low-contrast so questions and
+   answers read cleanly over it; the answer cards are opaque regardless.
+   Every scene is dark, so these views force the dark tokens in either theme.
+   ========================================================================== */
+
+body:is([data-view='game'], [data-view='results'])[data-category] {
+  color-scheme: dark;
+  --bg: #07070f;
+  --bg-elevated: rgba(18, 16, 34, 0.92);
+  --bg-raised: rgba(38, 32, 69, 0.9);
+  --surface-border: rgba(241, 238, 251, 0.14);
+  --text: #f5f0ff;
+  --text-muted: #bdb3de;
+  --text-faint: #8f88ad;
+  --correct: #2fd48f;
+  --correct-soft: rgba(47, 212, 143, 0.2);
+  --wrong: #ff5c78;
+  --wrong-soft: rgba(255, 92, 120, 0.2);
+  --gold: #ffc857;
+  --shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.9);
+  animation: none;
+  background-attachment: fixed;
+}
+
+.backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+body:is([data-view='game'], [data-view='results'])[data-category] .backdrop {
+  display: block;
+}
+/* Transparent controls would sit straight on the scenery; give them a base. */
+body:is([data-view='game'], [data-view='results'])[data-category] .btn--ghost {
+  background: rgba(8, 8, 18, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+body:is([data-view='game'], [data-view='results'])[data-category] .linkbtn {
+  text-shadow: 0 1px 6px #000, 0 0 2px #000;
+}
+/* A soft darkening down the reading column keeps text contrast high over any scene. */
+.backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 46rem 70% at 50% 42%, rgba(4, 4, 10, 0.5), transparent 75%);
+}
+.scene {
+  display: none;
+  position: absolute;
+  inset: 0;
+}
+body[data-category='science'] .scene--science,
+body[data-category='geography'] .scene--geography,
+body[data-category='current-events'] .scene--current-events,
+body[data-category='general-knowledge'] .scene--general-knowledge,
+body[data-category='entertainment'] .scene--entertainment {
+  display: block;
+}
+
+/* --- Science: the lab at night ---------------------------------------------- */
+
+body[data-category='science'] {
+  --accent: #22c3ff;
+  --accent-soft: rgba(34, 195, 255, 0.16);
+  --accent2: #7dff9b;
+  background-color: #04111c;
+  background-image:
+    radial-gradient(50rem 34rem at 88% 4%, rgba(34, 195, 255, 0.22), transparent 62%),
+    radial-gradient(40rem 30rem at 0% 100%, rgba(125, 255, 155, 0.12), transparent 60%),
+    linear-gradient(180deg, #05182a 0%, #030c16 100%);
+}
+.sci-lattice {
+  position: absolute;
+  inset: 0;
+  color: #5fd4ff;
+  opacity: 0.07;
+}
+.sci-atom {
+  position: absolute;
+  top: -40px;
+  right: -60px;
+  width: min(420px, 70vw);
+  height: min(420px, 70vw);
+  opacity: 0.55;
+  overflow: visible;
+}
+.sci-atom__spin {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: spin 90s linear infinite;
+}
+.sci-orbit {
+  fill: none;
+  stroke: #5fd4ff;
+  stroke-width: 1.4;
+  stroke-opacity: 0.7;
+}
+.sci-electron {
+  fill: #b8f3ff;
+  filter: drop-shadow(0 0 5px #22c3ff);
+}
+.sci-nucleus {
+  fill: #7dff9b;
+  filter: drop-shadow(0 0 14px rgba(125, 255, 155, 0.9));
+  animation: pulse 4s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.sci-dna {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: max(8px, calc(50% - 460px));
+  width: 90px;
+  overflow: hidden;
+  opacity: 0.4;
+  mask-image: linear-gradient(180deg, transparent, #000 15%, #000 85%, transparent);
+}
+.sci-dna svg {
+  display: block;
+  width: 90px;
+  height: 1800px;
+  animation: dna-rise 40s linear infinite;
+}
+.sci-dna__strand {
+  fill: none;
+  stroke: #22c3ff;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.sci-dna__strand--b { stroke: #7dff9b; }
+.sci-dna__rungs {
+  fill: none;
+  stroke: #bfefff;
+  stroke-opacity: 0.4;
+  stroke-width: 2;
+}
+.sci-molecule {
+  position: absolute;
+  right: max(-20px, calc(50% - 520px));
+  bottom: 8%;
+  width: 190px;
+  height: 190px;
+  opacity: 0.4;
+  animation: spin 120s linear infinite reverse;
+}
+.sci-bond {
+  fill: none;
+  stroke: #7dff9b;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.sci-bond--inner { stroke-opacity: 0.5; stroke-width: 1.5; }
+.sci-atomdot { fill: #22c3ff; }
+.sci-atomdot--alt { fill: #ff6fb1; }
+.sci-formula {
+  position: absolute;
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: #9fe6ff;
+  opacity: 0.22;
+  white-space: nowrap;
+}
+@keyframes dna-rise {
+  to { transform: translateY(-600px); }
+}
+@keyframes pulse {
+  from { transform: scale(0.9); }
+  to { transform: scale(1.12); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Geography: Earth from orbit ---------------------------------------------- */
+
+body[data-category='geography'] {
+  --accent: #3fa8ff;
+  --accent-soft: rgba(63, 168, 255, 0.16);
+  --accent2: #45e3b0;
+  background-color: #010208;
+  background-image: radial-gradient(60rem 30rem at 50% 110%, rgba(63, 140, 255, 0.25), transparent 70%);
+}
+.geo-stars {
+  position: absolute;
+  inset: 0;
+  opacity: 0.8;
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 27% 8%, #cfe3ff, transparent),
+    radial-gradient(1.4px 1.4px at 41% 26%, #fff, transparent),
+    radial-gradient(1px 1px at 58% 12%, #fff, transparent),
+    radial-gradient(1.3px 1.3px at 73% 30%, #dbe8ff, transparent),
+    radial-gradient(1px 1px at 86% 9%, #fff, transparent),
+    radial-gradient(1.2px 1.2px at 94% 38%, #fff, transparent),
+    radial-gradient(1px 1px at 5% 44%, #cfe3ff, transparent),
+    radial-gradient(1px 1px at 33% 47%, #fff, transparent),
+    radial-gradient(1.3px 1.3px at 66% 52%, #fff, transparent),
+    radial-gradient(1px 1px at 18% 60%, #fff, transparent),
+    radial-gradient(1px 1px at 80% 58%, #cfe3ff, transparent);
+  background-size: 420px 420px;
+}
+/* A huge sphere whose upper limb curves across the lower screen — the view
+   from a satellite. The surface is a strip of two texture copies, slid
+   sideways on the compositor so the planet turns without repainting. */
+.geo-earth {
+  --d: max(150vw, 1100px);
+  position: absolute;
+  left: 50%;
+  top: 60dvh;
+  width: var(--d);
+  height: var(--d);
+  margin-left: calc(var(--d) / -2);
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 2px rgba(140, 200, 255, 0.35),
+    0 0 40px 8px rgba(80, 160, 255, 0.55),
+    0 0 140px 40px rgba(50, 120, 255, 0.28);
+  opacity: 0.92;
+}
+.geo-earth__surface {
+  position: absolute;
+  top: -15%;
+  left: 0;
+  width: calc(var(--d) * 5.2);
+  height: 130%;
+  background: url('/img/earth-blue-marble.jpg') repeat-x 0 0 / 50% 100%;
+  will-change: transform;
+  animation: earth-turn 300s linear infinite;
+}
+.geo-earth__shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* Limb darkening (the surface falls away toward the edge), a faint blue
+     haze of atmosphere, and dusk creeping in from both sides. */
+  background:
+    radial-gradient(circle closest-side, transparent 72%, rgba(10, 40, 90, 0.25) 88%, rgba(0, 8, 30, 0.7) 97%, rgba(40, 110, 220, 0.5) 100%),
+    linear-gradient(90deg, rgba(0, 0, 8, 0.7) 0%, transparent 32%, transparent 68%, rgba(0, 0, 8, 0.7) 100%);
+  box-shadow: inset 0 24px 50px -16px rgba(150, 210, 255, 0.6);
+}
+@keyframes earth-turn {
+  to { transform: translateX(-50%); }
+}
+@media (min-width: 900px) {
+  .geo-earth { top: 58dvh; }
+}
+
+/* --- Current events: on air ---------------------------------------------------- */
+
+body[data-category='current-events'] {
+  --accent: #ff4d4d;
+  --accent-soft: rgba(255, 77, 77, 0.16);
+  --accent2: #ffb03a;
+  background-color: #0c0a10;
+  background-image:
+    radial-gradient(46rem 30rem at 100% 0%, rgba(255, 60, 60, 0.2), transparent 62%),
+    radial-gradient(40rem 30rem at 0% 100%, rgba(255, 176, 58, 0.1), transparent 60%),
+    linear-gradient(180deg, #140d14 0%, #0a080d 100%);
+}
+.news-columns {
+  position: absolute;
+  top: 12%;
+  bottom: 14%;
+  left: max(10px, calc(50% - 470px));
+  width: 150px;
+  opacity: 0.08;
+  background:
+    repeating-linear-gradient(180deg, #fff 0 3px, transparent 3px 11px) 0 0 / 68px 100% no-repeat,
+    repeating-linear-gradient(180deg, #fff 0 3px, transparent 3px 11px) 82px 30px / 68px 100% no-repeat;
+  mask-image: linear-gradient(180deg, transparent, #000 10%, #000 90%, transparent);
+}
+.news-globe {
+  position: absolute;
+  top: -70px;
+  right: -70px;
+  width: min(380px, 66vw);
+  height: min(380px, 66vw);
+  fill: none;
+  stroke: #ff8a7a;
+  stroke-width: 0.8;
+  opacity: 0.3;
+  animation: spin 200s linear infinite;
+}
+.news-rings {
+  position: absolute;
+  top: min(120px, 22vw);
+  right: min(120px, 22vw);
+  width: 0;
+  height: 0;
+}
+.news-rings span {
+  position: absolute;
+  left: -140px;
+  top: -140px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 90, 90, 0.85);
+  opacity: 0;
+  animation: broadcast 4.5s ease-out infinite;
+}
+.news-rings span:nth-child(2) { animation-delay: 1.5s; }
+.news-rings span:nth-child(3) { animation-delay: 3s; }
+.news-live {
+  position: absolute;
+  left: -22px;
+  top: -11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #e5262f;
+  color: #fff;
+  font: 700 11px/18px ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  box-shadow: 0 0 18px rgba(255, 60, 60, 0.7);
+  animation: live-blink 2s steps(1) infinite;
+}
+.news-ticker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  overflow: hidden;
+  background: rgba(229, 38, 47, 0.16);
+  border-top: 1px solid rgba(255, 77, 77, 0.35);
+}
+.news-ticker__track {
+  display: flex;
+  width: max-content;
+  animation: ticker 60s linear infinite;
+}
+.news-ticker__track span {
+  font: 600 11px/26px ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  letter-spacing: 0.18em;
+  color: rgba(255, 210, 200, 0.55);
+  white-space: nowrap;
+}
+@keyframes broadcast {
+  from { transform: scale(0.15); opacity: 0.8; }
+  to { transform: scale(1); opacity: 0; }
+}
+@keyframes live-blink {
+  50% { opacity: 0.55; }
+}
+@keyframes ticker {
+  to { transform: translateX(-50%); }
+}
+
+/* --- General knowledge: a library of ideas ---------------------------------- */
+
+body[data-category='general-knowledge'] {
+  --accent: #f2a93b;
+  --accent-soft: rgba(242, 169, 59, 0.16);
+  --accent2: #ff7a59;
+  background-color: #110c08;
+  background-image:
+    radial-gradient(44rem 30rem at 0% 0%, rgba(242, 169, 59, 0.2), transparent 62%),
+    radial-gradient(40rem 30rem at 100% 100%, rgba(255, 122, 89, 0.12), transparent 60%),
+    linear-gradient(180deg, #1a120c 0%, #0d0906 100%);
+}
+.gk-bulb {
+  position: absolute;
+  top: 3%;
+  left: max(4px, calc(50% - 500px));
+  width: 120px;
+  height: 168px;
+  fill: none;
+  stroke: #ffd27a;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.4;
+  filter: drop-shadow(0 0 18px rgba(242, 169, 59, 0.6));
+  animation: bulb-glow 5s ease-in-out infinite alternate;
+}
+.gk-bulb__filament { stroke: #fff1c9; }
+.gk-glyphs span {
+  position: absolute;
+  bottom: -40px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 30px;
+  font-weight: 700;
+  color: #ffd27a;
+  opacity: 0;
+  animation: glyph-rise 36s linear infinite;
+}
+.gk-glyphs span:nth-child(even) {
+  font-size: 22px;
+  color: #ff9f80;
+}
+.gk-shelf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 110px;
+  opacity: 0.32;
+}
+.gk-books rect:nth-child(3n + 1) { fill: #8a4b2c; }
+.gk-books rect:nth-child(3n + 2) { fill: #c98b3a; }
+.gk-books rect:nth-child(3n) { fill: #5e3a5c; }
+.gk-plank { fill: #c98b3a; }
+@keyframes bulb-glow {
+  from { opacity: 0.28; }
+  to { opacity: 0.55; }
+}
+@keyframes glyph-rise {
+  0% { transform: translateY(0) rotate(-8deg); opacity: 0; }
+  10% { opacity: 0.3; }
+  80% { opacity: 0.2; }
+  100% { transform: translateY(-110vh) rotate(10deg); opacity: 0; }
+}
+
+/* --- Entertainment: premiere night ------------------------------------------ */
+
+body[data-category='entertainment'] {
+  --accent: #ff3fa0;
+  --accent-soft: rgba(255, 63, 160, 0.16);
+  --accent2: #ffc857;
+  background-color: #0e0612;
+  background-image:
+    radial-gradient(50rem 30rem at 50% 120%, rgba(255, 63, 160, 0.22), transparent 65%),
+    radial-gradient(40rem 26rem at 50% -10%, rgba(140, 70, 255, 0.2), transparent 60%),
+    linear-gradient(180deg, #170a1d 0%, #0b050e 100%);
+}
+.ent-beam {
+  position: absolute;
+  bottom: -10vh;
+  width: 30vmax;
+  height: 125vh;
+  transform-origin: 50% 100%;
+  background: linear-gradient(0deg, rgba(255, 230, 190, 0.2), rgba(255, 230, 190, 0.06) 55%, transparent 90%);
+  clip-path: polygon(47% 100%, 53% 100%, 100% 0, 0 0);
+  filter: blur(14px);
+  mix-blend-mode: screen;
+}
+.ent-beam--left {
+  left: -10vmax;
+  animation: beam-left 14s ease-in-out infinite alternate;
+}
+.ent-beam--right {
+  right: -10vmax;
+  animation: beam-right 17s ease-in-out infinite alternate;
+}
+.ent-film {
+  position: absolute;
+  bottom: 70px;
+  left: -10%;
+  width: 120%;
+  height: 64px;
+  transform: rotate(-6deg);
+  overflow: hidden;
+  opacity: 0.3;
+}
+.ent-film__track {
+  width: calc(200% + 120px);
+  height: 100%;
+  background:
+    /* sprocket holes, top and bottom */
+    repeating-linear-gradient(90deg, transparent 0 8px, #0e0612 8px 16px, transparent 16px 24px) 0 5px / 100% 7px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 8px, #0e0612 8px 16px, transparent 16px 24px) 0 52px / 100% 7px no-repeat,
+    /* frames */
+    repeating-linear-gradient(90deg, rgba(255, 63, 160, 0.55) 0 76px, #0e0612 76px 84px, rgba(140, 70, 255, 0.55) 84px 160px, #0e0612 160px 168px) 0 16px / 100% 32px no-repeat,
+    #2a1630;
+  animation: film-roll 30s linear infinite;
+}
+.ent-bulbs {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: radial-gradient(circle, #ffe3a3 0 3px, rgba(255, 200, 87, 0.35) 4px, transparent 5px) 0 0 / 28px 10px repeat-x;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 87, 0.8));
+  animation: marquee 1.6s steps(2) infinite;
+  opacity: 0.7;
+}
+.ent-sparkles {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.ent-sparkle { fill: #ffe3a3; }
+.ent-sparkles .tw1 { animation: twinkle 3s ease-in-out infinite alternate; }
+.ent-sparkles .tw2 { animation: twinkle 4s ease-in-out -1s infinite alternate; }
+.ent-sparkles .tw3 { animation: twinkle 5s ease-in-out -2s infinite alternate; }
+@keyframes beam-left {
+  from { transform: rotate(28deg); }
+  to { transform: rotate(4deg); }
+}
+@keyframes beam-right {
+  from { transform: rotate(-30deg); }
+  to { transform: rotate(-6deg); }
+}
+@keyframes film-roll {
+  to { transform: translateX(-168px); }
+}
+@keyframes marquee {
+  to { background-position: 14px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop * { animation: none !important; }
+}

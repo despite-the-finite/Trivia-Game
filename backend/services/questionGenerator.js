@@ -1,6 +1,6 @@
 import { generateJson, isLlmEnabled } from './llm.js';
 import { buildGeographyQuestions } from './geographyTemplates.js';
-import { validateBatch, fingerprint } from './questionValidator.js';
+import { validateBatch } from './questionValidator.js';
 import { CATEGORY_LABELS } from '../lib/config.js';
 
 /**
@@ -240,11 +240,15 @@ async function rephraseTemplateQuestions(items) {
       ) {
         return item;
       }
+      // The fingerprint deliberately stays the template one. It identifies the
+      // underlying fact, so tomorrow's refresh — which is checked against
+      // template wording before any rephrasing — recognises it as already
+      // asked. Fingerprinting the rewrite let the same fact return every few
+      // days under new wording.
       return {
         ...item,
         question: trimmed,
         generator: 'template+llm',
-        fingerprint: fingerprint(trimmed, item.correctAnswer),
       };
     });
   } catch (err) {
@@ -262,7 +266,10 @@ export async function generateGeography(documents, { count, seenFingerprints, rn
   if (!records.length) return { accepted: [], rejected: [], generated: 0 };
 
   const datasetDoc = documents[0];
-  const templated = buildGeographyQuestions(records, rng, count);
+  // Draw well past `count`: anything asked in the last 60 days is rejected as a
+  // duplicate below, and on a dataset that barely changes that can be most of
+  // a small draw.
+  const templated = buildGeographyQuestions(records, rng, count * 5);
 
   const candidates = templated.map((t) => {
     const doc =
@@ -295,7 +302,7 @@ export async function generateGeography(documents, { count, seenFingerprints, rn
     seenFingerprints,
   });
 
-  const polished = await rephraseTemplateQuestions(accepted);
+  const polished = await rephraseTemplateQuestions(accepted.slice(0, count));
 
   return { accepted: polished, rejected, generated: candidates.length };
 }

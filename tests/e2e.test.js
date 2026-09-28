@@ -450,3 +450,61 @@ describe('there is no combined Mixed quiz: a category is required', async () => 
   const mixed = await call('/api/daily-challenge?category=mixed', { token: player.body.token });
   assert.equal(mixed.status, 400);
 });
+
+describe("a new day's quiz refreshes a stale bank instead of repeating yesterday's", async () => {
+  const { getDailyStatus } = await import('../backend/services/dailyChallengeService.js');
+  const { shiftGameDay } = await import('../backend/lib/day.js');
+  const today = todayGameDay();
+  const tomorrow = shiftGameDay(today, 1);
+
+  await getDailyStatus(null, 'geography', today);
+  const { question_ids: todaysIds } = await db.queryOne(
+    `SELECT question_ids FROM daily_challenges WHERE day = $1 AND category = 'geography'`,
+    [today],
+  );
+
+  // The state the bank was in when the bug hit: the only live geography
+  // questions are ones already used, because the midnight refresh has not
+  // landed yet. A stored Wikidata snapshot (new countries) is on hand.
+  await db.query(
+    `UPDATE questions SET active = FALSE WHERE category = 'geography' AND NOT (id = ANY($1))`,
+    [todaysIds],
+  );
+  const records = [
+    ['Canada', 'CAN', 'Ottawa', 39e6, 9984670, 'North America', ['USA'], 'Canadian dollar', ['English']],
+    ['United States', 'USA', 'Washington, D.C.', 333e6, 9833520, 'North America', ['CAN', 'MEX'], 'US dollar', ['English']],
+    ['Mexico', 'MEX', 'Mexico City', 128e6, 1964375, 'North America', ['USA'], 'Mexican peso', ['Spanish']],
+    ['Cuba', 'CUB', 'Havana', 11e6, 109884, 'North America', [], 'Cuban peso', ['Spanish']],
+    ['Jamaica', 'JAM', 'Kingston', 2.8e6, 10991, 'North America', [], 'Jamaican dollar', ['English']],
+    ['Honduras', 'HND', 'Tegucigalpa', 10e6, 112492, 'North America', [], 'Honduran lempira', ['Spanish']],
+    ['Panama', 'PAN', 'Panama City', 4.4e6, 75417, 'North America', [], 'Panamanian balboa', ['Spanish']],
+    ['Haiti', 'HTI', 'Port-au-Prince', 11.5e6, 27750, 'North America', [], 'Haitian gourde', ['Haitian Creole']],
+  ].map(([name, code, capital, population, area, region, borders, currency, languages]) => ({
+    kind: 'country',
+    name, code, capital, population, area, region, subregion: null, borders,
+    currencies: [{ code: '', name: currency }],
+    languages,
+  }));
+  for (const datasetId of ['wikidata-countries', 'wikidata-peaks', 'wikidata-rivers']) {
+    await db.query(
+      `INSERT INTO source_documents (provider, category, title, url, source_name, facts, checksum)
+       VALUES ('geographyProvider', 'geography', $1, 'https://query.wikidata.org/', 'Wikidata', $2::jsonb, $3)`,
+      [
+        datasetId,
+        JSON.stringify({ datasetId, records: datasetId === 'wikidata-countries' ? records : [] }),
+        `e2e-snapshot-${datasetId}`,
+      ],
+    );
+  }
+
+  const status = await getDailyStatus(null, 'geography', tomorrow);
+  assert.equal(status.questionCount, 5);
+  const { question_ids: tomorrowsIds } = await db.queryOne(
+    `SELECT question_ids FROM daily_challenges WHERE day = $1 AND category = 'geography'`,
+    [tomorrow],
+  );
+  const repeats = tomorrowsIds.filter((id) => todaysIds.includes(id));
+  assert.deepEqual(repeats, [], "tomorrow's quiz must not reuse today's questions");
+
+  await db.query(`DELETE FROM daily_challenges WHERE day = $1`, [tomorrow]);
+});

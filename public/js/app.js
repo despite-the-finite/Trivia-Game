@@ -38,6 +38,12 @@ function showScreen(name) {
   window.scrollTo(0, 0);
 }
 
+// The backdrops' SVG (SMIL) motion isn't covered by the stylesheet's
+// reduced-motion rule, so hold it still here.
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  for (const svg of $$('.backdrop svg')) svg.pauseAnimations?.();
+}
+
 /**
  * The app is online-only by design. Any network failure lands here rather than
  * degrading into a half-working state with stale content.
@@ -413,6 +419,8 @@ async function startCategoryQuiz() {
     },
   });
   if (!started) return;
+  // Picks the category's scenery behind the game and results screens.
+  document.body.dataset.category = state.category;
   if (started.session?.isPractice) {
     toast("Today's score is already locked in — this run is practice only.");
   }
