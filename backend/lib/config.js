@@ -64,6 +64,11 @@ export const SCORING = {
   /** Per-question time limit. At or beyond this, the speed bonus is zero. */
   questionTimeLimitMs: int(process.env.QUESTION_TIME_LIMIT_MS, 20000),
   /**
+   * Reading time shown before each question's answers appear. The clock (and
+   * so the speed bonus) only starts once the answers are on screen.
+   */
+  readDelayMs: int(process.env.QUESTION_READ_DELAY_MS, 3000),
+  /**
    * Below this, a human could not have read the question. Such answers still
    * score base points if correct, but earn no speed bonus — so mashing a button
    * is never better than reading.

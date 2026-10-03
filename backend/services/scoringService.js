@@ -128,6 +128,7 @@ export function scoringRules() {
     maxSpeedBonus: SCORING.maxSpeedBonus,
     fullBonusMs: SCORING.fullBonusMs,
     questionTimeLimitMs: SCORING.questionTimeLimitMs,
+    readDelayMs: SCORING.readDelayMs,
     streakBonuses: SCORING.streakBonuses.map(({ min, label }) => ({ min, label })),
   };
 }

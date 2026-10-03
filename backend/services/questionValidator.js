@@ -38,6 +38,42 @@ const BANNED_OPTIONS = [
   'cannot be determined', 'unknown', 'n/a',
 ];
 
+/**
+ * Parses an answer option that is just a number ("1,054", "~2.5%", "$40",
+ * "313 km"), returning its digits, or null for anything else.
+ */
+function numericDigits(option) {
+  const match = /^[~≈$£€]?\s*([\d,]*\.?\d+)\s*(%|[a-z]{1,5}\.?)?$/i.exec(option.trim());
+  if (!match) return null;
+  const digits = match[1].replace(/,/g, '');
+  return Number.isFinite(Number(digits)) ? digits : null;
+}
+
+/** Significant figures in a plain decimal string: "313" → 3, "1200" → 2, "2.5" → 2. */
+function significantFigures(digits) {
+  const [whole, fraction = ''] = digits.split('.');
+  const trimmedWhole = whole.replace(/^0+/, '');
+  if (fraction) {
+    return trimmedWhole ? trimmedWhole.length + fraction.length : fraction.replace(/^0+/, '').length;
+  }
+  return trimmedWhole.replace(/0+$/, '').length;
+}
+
+/**
+ * A "how many" question whose options are all numbers and whose answer is a
+ * specific, non-round figure (313 nebulae, 1,054 patients) can only be answered
+ * by someone who read the source. Years are exempt — they are judged on
+ * whether the event is well known, not by their shape.
+ */
+function isExactFigureQuestion(answers, correctIndex) {
+  if (answers.length !== 4 || correctIndex === -1) return false;
+  const parsed = answers.map(numericDigits);
+  if (parsed.some((d) => d === null)) return false;
+  const allYears = parsed.every((d) => /^\d{4}$/.test(d) && Number(d) >= 1000 && Number(d) <= 2100);
+  if (allYears) return false;
+  return significantFigures(parsed[correctIndex]) >= 3;
+}
+
 const containsAny = (haystack, needles) => {
   const lower = haystack.toLowerCase();
   return needles.filter((needle) => lower.includes(needle));
@@ -113,6 +149,9 @@ export function validateQuestion(candidate, context = {}) {
       fail('correct-answer-conspicuously-long');
     }
   }
+
+  // Nobody can be expected to know 313 versus 427 — only the article's reader.
+  if (isExactFigureQuestion(answers, correctIndex)) fail('obscure-exact-figure');
 
   // --- Content quality --------------------------------------------------
   const haystack = `${question} ${answers.join(' ')}`;

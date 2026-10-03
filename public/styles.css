@@ -729,6 +729,9 @@ button {
 .timer span.is-low {
   background: var(--wrong);
 }
+.timer span.is-holding {
+  background: var(--text-faint);
+}
 
 .question {
   flex: 1;

@@ -33,7 +33,9 @@ Absolute rules:
     - medium: a specific but clearly stated detail (a named person or place, a simple comparison).
     - hard: a precise or easy-to-overlook detail (an exact figure, a minor named entity, a secondary fact). Use sparingly.
     Difficulty must never come from ambiguity, trick wording or obscure phrasing — every question stays clearly answerable from the source regardless of its difficulty. Aim for about half easy, a third medium and no more than one in six hard across the batch.
-13. Spread the batch across different subjects. Do not write more than one question on the same topic, event or organism, even if several documents cover it.`;
+13. Spread the batch across different subjects. Do not write more than one question on the same topic, event or organism, even if several documents cover it.
+14. Never ask a player to recall an exact figure they could only know by looking it up: catalogue sizes, survey counts, study sample sizes, precise measurements, dates of minor events, or any "how many" whose answer is a specific, non-round number (313, 1,054, 2.47). A number is fair game only if it is genuinely famous, or if the options differ by orders of magnitude (10 / 1,000 / 100,000 / 10 million) so a thoughtful player can reason to it. When a story's main fact is a precise number, ask about what was discovered, who did it, or why it matters instead.
+15. Before keeping a question, ask: could a well-read adult who had not seen this story either know the answer or reason their way to it from the options? If the only route to the answer is having read the source, rewrite or drop it.`;
 
 /**
  * Extra, category-specific direction appended to the prompt. The absolute

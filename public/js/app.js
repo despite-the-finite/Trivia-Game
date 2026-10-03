@@ -21,6 +21,9 @@ const state = {
   lastSummary: null,
   timer: null,
   questionDeadline: 0,
+  /** Pending reveal of the answers after the untimed reading hold. */
+  holdTimer: null,
+  resumeHold: false,
   awaitingNext: false,
 };
 
@@ -173,7 +176,15 @@ const statTile = (value, label) =>
 // Game loop
 // ---------------------------------------------------------------------------
 
+function cancelHold() {
+  if (state.holdTimer) {
+    clearTimeout(state.holdTimer);
+    state.holdTimer = null;
+  }
+}
+
 function stopTimer() {
+  cancelHold();
   if (state.timer) {
     cancelAnimationFrame(state.timer);
     state.timer = null;
@@ -229,6 +240,43 @@ function renderQuestion() {
 
   setText('q-category', CATEGORY_LABELS[question.category] ?? question.category);
   setText('q-text', question.question);
+
+  clear(role('answers'));
+  startReadingHold();
+}
+
+/**
+ * Shows the question on its own for a few seconds before the answers appear.
+ * The clock — and with it the speed bonus — only starts once they do, so a
+ * slow reader is not penalised against a fast one.
+ */
+function startReadingHold() {
+  stopTimer();
+  const holdMs = triviaService.scoring?.readDelayMs ?? 3000;
+  const fill = role('timer-fill');
+  if (fill) {
+    // The bar fills up during the hold, then drains once the clock runs.
+    fill.classList.remove('is-low');
+    fill.classList.add('is-holding');
+    fill.style.transition = 'none';
+    fill.style.transform = 'scaleX(0)';
+    void fill.offsetWidth;
+    fill.style.transition = `transform ${holdMs}ms linear`;
+    fill.style.transform = 'scaleX(1)';
+  }
+  state.holdTimer = setTimeout(revealAnswers, holdMs);
+}
+
+function revealAnswers() {
+  state.holdTimer = null;
+  const question = triviaService.current;
+  if (!question) return;
+
+  const fill = role('timer-fill');
+  if (fill) {
+    fill.classList.remove('is-holding');
+    fill.style.transition = '';
+  }
 
   const answersNode = clear(role('answers'));
   question.answers.forEach((answer, index) => {
@@ -719,8 +767,15 @@ function bindEvents() {
 
   // Pause the timer when the tab is hidden so backgrounding is not a penalty.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && state.screen === 'game') stopTimer();
-    else if (!document.hidden && state.screen === 'game' && !state.awaitingNext) {
+    const holding = Boolean(state.holdTimer);
+    if (document.hidden && state.screen === 'game') {
+      stopTimer();
+      state.resumeHold = holding;
+    } else if (!document.hidden && state.screen === 'game' && state.resumeHold) {
+      // Hidden mid-hold: the answers never appeared, so just restart the hold.
+      state.resumeHold = false;
+      startReadingHold();
+    } else if (!document.hidden && state.screen === 'game' && !state.awaitingNext) {
       const remaining = Math.max(state.questionDeadline - performance.now(), 1500);
       startTimer(remaining);
     }

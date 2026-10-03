@@ -1,5 +1,5 @@
 import { queryOne, queryRows, withTransaction } from '../db/index.js';
-import { GAME, PLAYABLE_CATEGORIES } from '../lib/config.js';
+import { GAME, PLAYABLE_CATEGORIES, SCORING } from '../lib/config.js';
 import { badRequest, conflict, notFound, forbidden } from '../lib/http.js';
 import { isUuid } from '../lib/ids.js';
 import { getQuestionsByIds, toPlayShape, toRevealShape, markServed } from './questionService.js';
@@ -140,13 +140,15 @@ export async function submitAnswer(player, { sessionId, questionId, selectedInde
   const correct = canonicalIndex !== null && canonicalIndex === question.correct_index;
 
   // Server-side elapsed time: measured from when the run started, minus the
-  // time already accounted for by previously answered questions.
+  // time already accounted for by previously answered questions and the
+  // untimed reading hold that precedes every question, this one included.
   const priorMs = await queryOne(
     'SELECT COALESCE(SUM(response_ms), 0)::int AS spent, COUNT(*)::int AS answered FROM session_answers WHERE session_id = $1',
     [sessionId],
   );
   const wallClockMs = Date.now() - new Date(session.started_at).valueOf();
-  const serverElapsedMs = Math.max(0, wallClockMs - priorMs.spent);
+  const readingMs = (priorMs.answered + 1) * SCORING.readDelayMs;
+  const serverElapsedMs = Math.max(0, wallClockMs - priorMs.spent - readingMs);
 
   const timing = reconcileResponseTime({
     clientMs: Number(responseMs),

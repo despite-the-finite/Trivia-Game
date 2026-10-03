@@ -158,3 +158,62 @@ test('fingerprints distinguish different answers to the same question', () => {
   const b = fingerprint('Which country hosted the 2026 summit?', 'Denmark');
   assert.notEqual(a, b);
 });
+
+test('an exact, non-round figure as the answer is rejected as unanswerable', () => {
+  const result = validateQuestion(
+    good({
+      question: 'The Sharpless Catalog lists how many glowing star-forming clouds?',
+      answers: ['1,054', '427', '313', '88'],
+      correctAnswer: '313',
+    }),
+    context,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.includes('obscure-exact-figure'));
+});
+
+test('round numbers spread by order of magnitude are still allowed', () => {
+  const result = validateQuestion(
+    good({
+      question: 'Roughly how many stars are in the Milky Way galaxy?',
+      answers: ['100 billion', '10 million', '1,000', '50'],
+      correctAnswer: '100 billion',
+    }),
+    context,
+  );
+  assert.equal(result.ok, true, result.reasons.join(', '));
+});
+
+test('round figures with units pass, precise ones with units do not', () => {
+  const round = validateQuestion(
+    good({
+      question: 'About how deep did the new research borehole reach?',
+      answers: ['2 km', '20 km', '200 m', '20 m'],
+      correctAnswer: '2 km',
+    }),
+    context,
+  );
+  assert.equal(round.ok, true, round.reasons.join(', '));
+
+  const precise = validateQuestion(
+    good({
+      question: 'How deep did the new research borehole reach?',
+      answers: ['2,147 m', '1,800 m', '3,050 m', '950 m'],
+      correctAnswer: '2,147 m',
+    }),
+    context,
+  );
+  assert.ok(precise.reasons.includes('obscure-exact-figure'));
+});
+
+test('year options are not treated as exact figures', () => {
+  const result = validateQuestion(
+    good({
+      question: 'In which year did the first crewed Moon landing take place?',
+      answers: ['1969', '1957', '1972', '1961'],
+      correctAnswer: '1969',
+    }),
+    context,
+  );
+  assert.equal(result.ok, true, result.reasons.join(', '));
+});
