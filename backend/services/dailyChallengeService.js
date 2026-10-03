@@ -1,7 +1,7 @@
 import { queryOne, queryRows, withAdvisoryLock, lockKey } from '../db/index.js';
 import { APP, GAME } from '../lib/config.js';
 import { unavailable } from '../lib/http.js';
-import { todayGameDay } from '../lib/day.js';
+import { todayGameDay, gameDayBounds } from '../lib/day.js';
 import { seededRandom } from '../lib/ids.js';
 import { pickBalancedSet, buildAnswerOrders, getQuestionsByIds } from './questionService.js';
 import { createFixedSession, shapeSessionForPlay } from './sessionService.js';
@@ -179,6 +179,8 @@ export async function getDailyStatus(player, category, day = todayGameDay()) {
   return {
     day,
     category,
+    // When this game day ends and the next quiz goes live (home's countdown).
+    resetsAt: gameDayBounds(day).end.toISOString(),
     questionCount: daily.question_ids.length,
     played: Boolean(attempt?.completed_at),
     inProgress: Boolean(attempt && !attempt.completed_at),

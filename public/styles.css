@@ -406,24 +406,6 @@ button {
   width: 38px;
   flex: none;
 }
-.topbar__name {
-  margin: 0;
-  font-weight: 700;
-  font-size: 17px;
-}
-.avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 17px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  flex: none;
-}
-
 /* --- Stats strip ---------------------------------------------------------- */
 
 .stats-strip {
@@ -1076,44 +1058,68 @@ button {
 }
 
 /* ==========================================================================
-   The Entropic Labs treatment — cover and home screens only.
+   Entropic Labs v2 — cover, onboarding and home screens.
 
    showScreen() mirrors the active screen onto <body data-view>, so everything
-   here is scoped to those two views and every other screen keeps the base
-   look above. The tokens are re-declared (dark, near-black violet) rather than
-   using new classes so the existing components pick them up unchanged.
+   here is scoped to those three views and every other screen keeps the base
+   look above. The base tokens are re-pointed at the brand palette so shared
+   components (forms, panels, toasts) pick it up unchanged; the brand tokens
+   themselves (--ink-*, --acid, ...) live here too.
    ========================================================================== */
 
-body[data-view='cover'],
-body[data-view='home'] {
-  color-scheme: dark;
-  --bg: #07050f;
-  --bg-elevated: #130e22;
-  --bg-raised: #1c1433;
-  --surface-border: rgba(241, 238, 251, 0.12);
-  --text: #f1eefb;
-  --text-muted: #b4a9d6;
-  --text-faint: #9c93b8;
-  --accent: #7c4dff;
-  --accent-soft: rgba(124, 77, 255, 0.16);
-  --accent-strong: #b9a3ff;
-  --accent3: #2fe0c7;
-  --gold: #ffc857;
-  --correct: #2fe0c7;
-  --font-display: 'Arial Narrow', 'Helvetica Neue Condensed', 'Roboto Condensed', Arial, sans-serif;
-  --font-mono: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(64rem 40rem at 50% -14%, rgba(72, 42, 156, 0.34), transparent 62%),
-    radial-gradient(46rem 34rem at 108% 108%, rgba(46, 28, 112, 0.3), transparent 60%),
-    linear-gradient(180deg, #0a0716 0%, #07050f 60%, #06040d 100%);
-  background-size: auto;
-  background-attachment: fixed;
-  animation: none;
+:root {
+  --ink-0: #0b0b0d;
+  --ink-1: #16161a;
+  --ink-2: #26262c;
+  --ink-3: #1e1e24;
+  --paper: #f4f1ea;
+  --mute: #8e8e98;
+  --acid: #c8ff3d;
+  --mint: #8cf0a8;
+  --sky: #59c8ff;
+  --coral: #ff5b38;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, Menlo, monospace;
+  --font-sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* --- Sky: sparse stars and faint dotted orbits, edges only ------------------ */
+body:is([data-view='cover'], [data-view='onboarding'], [data-view='home']) {
+  color-scheme: dark;
+  --bg: var(--ink-0);
+  --bg-elevated: var(--ink-1);
+  --bg-raised: var(--ink-1);
+  --surface-border: var(--ink-2);
+  --text: var(--paper);
+  --text-muted: var(--mute);
+  --text-faint: var(--mute);
+  --accent: var(--acid);
+  --accent-soft: rgba(200, 255, 61, 0.1);
+  --accent-strong: var(--acid);
+  --correct: var(--mint);
+  --wrong: var(--coral);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: none;
+
+  background-color: var(--ink-0);
+  background-image: radial-gradient(#1a1a20 1px, transparent 1.2px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
+  animation: none;
+  font-family: var(--font-sans);
+}
+
+/* The one place a section label is styled; reused across the three views. */
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home'])
+  :is(.section__title, .playcard__label, .panel__kicker, .field__label) {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* --- Ambient: one oversized Pulse mark, drifting, faded out downwards ------- */
 
 .ambient {
   display: none;
@@ -1123,301 +1129,515 @@ body[data-view='home'] {
   overflow: hidden;
   pointer-events: none;
 }
-body[data-view='cover'] .ambient,
-body[data-view='home'] .ambient {
+body:is([data-view='cover'], [data-view='onboarding'], [data-view='home']) .ambient {
   display: block;
 }
 #app {
   position: relative;
   z-index: 1;
 }
-.ambient .star { fill: #f1eefb; }
-.ambient .star--teal { fill: #2fe0c7; }
-.ambient .star--magenta { fill: #ff3fa0; }
-.ambient .star--amber { fill: #ffc857; }
-.ambient .orbit__path {
-  fill: none;
-  stroke: #b4a9d6;
-  stroke-opacity: 0.3;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-dasharray: 0.1 9;
+.ambient__mark {
+  position: absolute;
+  width: min(120vw, 760px);
+  height: min(120vw, 760px);
+  right: -40%;
+  top: -22%;
+  opacity: 0.14;
 }
-.ambient .orbit__path--outer { stroke-opacity: 0.18; }
-.ambient .orbit { animation: orbit-drift 480s linear infinite; }
-.ambient .orbit--reverse { animation-direction: reverse; }
-.ambient .tw1 { animation: twinkle 7s ease-in-out infinite alternate; }
-.ambient .tw2 { animation: twinkle 9s ease-in-out -3s infinite alternate; }
-.ambient .tw3 { animation: twinkle 11s ease-in-out -6s infinite alternate; }
-@keyframes orbit-drift {
-  to { transform: rotate(360deg); }
-}
-@keyframes twinkle {
-  0% { opacity: 0.25; }
-  100% { opacity: 1; }
-}
-@media (max-width: 700px) {
-  .ambient .orbit-scale { transform: scale(0.5); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ambient .orbit,
-  .ambient .star { animation: none !important; }
+.ambient__fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 11, 13, 0) 0%, rgba(11, 11, 13, 0.55) 55%, #0b0b0d 100%);
 }
 
-/* --- Shared: cover + home --------------------------------------------------- */
+/* --- The Pulse mark, wherever it's inline ------------------------------------ */
 
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .btn {
+.pulse-mark {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+.pulse-mark--header {
+  width: 32px;
+  height: 32px;
+}
+.pulse-mark--hero {
+  width: 72px;
+  height: 72px;
+  margin: 4px auto 26px;
+  filter: drop-shadow(0 0 28px rgba(200, 255, 61, 0.25));
+}
+
+/* --- Shared controls ------------------------------------------------------------ */
+
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home']) .btn {
   min-height: 48px;
-  border-radius: 10px;
+  border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.16em;
-  transition: transform 0.12s var(--ease-out), border-color 0.18s, background 0.18s, box-shadow 0.18s;
+  transition: transform 0.12s var(--ease-out), border-color 0.18s, background 0.18s, color 0.18s;
 }
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .btn--primary {
-  background: linear-gradient(180deg, #7c4dff 0%, #6a3fee 100%);
-  border-color: rgba(185, 163, 255, 0.5);
-  color: #fff;
-  box-shadow: 0 0 0 1px rgba(124, 77, 255, 0.2), 0 12px 32px -14px rgba(124, 77, 255, 0.8);
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home']) .btn--primary {
+  min-height: 52px;
+  background: var(--acid);
+  border-color: var(--acid);
+  color: var(--ink-0);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(200, 255, 61, 0.15), 0 14px 36px -16px rgba(200, 255, 61, 0.7);
 }
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .btn--primary:hover {
-  border-color: rgba(214, 200, 255, 0.85);
-  box-shadow: 0 0 0 1px rgba(124, 77, 255, 0.45), 0 14px 38px -12px rgba(124, 77, 255, 1);
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home']) .btn--primary:hover {
+  background: var(--paper);
+  border-color: var(--paper);
 }
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .btn--secondary {
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home'])
+  :is(.btn--secondary, .btn--ghost) {
   background: transparent;
-  border-color: rgba(241, 238, 251, 0.18);
-  color: var(--text);
+  border-color: var(--ink-2);
+  color: var(--paper);
 }
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .btn--secondary:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home'])
+  :is(.btn--secondary, .btn--ghost):hover {
+  border-color: var(--acid);
 }
-:is(.screen[data-screen='cover'], .screen[data-screen='home'])
-  :is(.btn, .chip, .card, .linkbtn, .iconbtn):focus-visible {
-  outline: 2px solid var(--accent3);
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding'], .screen[data-screen='home'])
+  :is(.btn, .chip, .linkbtn, .iconbtn):focus-visible {
+  outline: 2px solid var(--acid);
   outline-offset: 3px;
 }
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip {
-  min-height: 40px;
-  background: transparent;
-  border-color: rgba(241, 238, 251, 0.16);
-  color: var(--text-muted);
-  transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
-}
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip:hover {
-  border-color: rgba(124, 77, 255, 0.7);
-  color: var(--text);
-}
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip.is-selected {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--text);
-  box-shadow: 0 0 18px -8px rgba(124, 77, 255, 0.9);
-}
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip.is-complete {
-  border-color: rgba(47, 224, 199, 0.55);
-}
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip.is-complete::after {
-  color: var(--accent3);
-}
-:is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip.is-complete.is-selected {
-  background: var(--accent-soft);
-  color: var(--text);
-}
-@media (pointer: coarse) {
-  :is(.screen[data-screen='cover'], .screen[data-screen='home']) .chip { min-height: 44px; }
-}
 
-/* --- Cover ------------------------------------------------------------------ */
+/* --- Cover + onboarding ----------------------------------------------------------- */
 
-.screen[data-screen='cover'] .panel--centered {
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding']) .panel--centered {
   margin-top: 6dvh;
-  padding: 34px 24px 28px;
-  background: rgba(19, 14, 34, 0.55);
-  border-color: var(--surface-border);
-  border-radius: 14px;
-  box-shadow: none;
+  padding: 32px 22px 26px;
+  background: var(--ink-1);
+  border-color: var(--ink-2);
+  border-radius: 8px;
 }
-.screen[data-screen='cover'] .panel--centered::before {
+:is(.screen[data-screen='cover'], .screen[data-screen='onboarding']) .panel--centered::before {
   display: none;
 }
 .screen[data-screen='cover'] .panel__title--hero {
-  font-family: var(--font-display);
-  font-size: clamp(2.1rem, 9.5vw, 2.9rem);
+  font-family: var(--font-mono);
+  font-size: clamp(20px, 6.2vw, 28px);
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: 0.02em;
+  line-height: 1.15;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   text-wrap: balance;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
-  color: var(--text);
+  color: var(--paper);
   animation: none;
+}
+.panel__kicker {
+  margin: 0 0 22px;
+}
+.screen[data-screen='cover'] .panel__kicker {
+  font-weight: 500;
+  letter-spacing: 0.16em;
 }
 .screen[data-screen='cover'] .panel__subtitle {
   font-size: 16px;
   line-height: 1.5;
-  color: var(--text-muted);
+  color: var(--mute);
   margin-bottom: 24px;
 }
 .screen[data-screen='cover'] .coverlist {
   margin-bottom: 24px;
   padding-top: 22px;
-  border-top: 1px solid var(--surface-border);
+  border-top: 1px solid var(--ink-2);
 }
 .screen[data-screen='cover'] .coverlist li {
-  color: var(--text-muted);
+  align-items: baseline;
+  color: var(--mute);
   font-size: 14.5px;
+}
+.screen[data-screen='cover'] .coverlist__icon {
+  width: 6px;
+  height: 6px;
+  border-radius: 1.5px;
+  background: var(--acid);
+  transform: translateY(-2px);
 }
 .screen[data-screen='cover'] .coverlist__categories {
   margin-bottom: 8px;
 }
-
-/* --- Home ------------------------------------------------------------------- */
-
-.screen[data-screen='home'] .topbar {
-  padding: 8px 0 20px;
+.screen[data-screen='cover'] .chip {
+  border-radius: 6px;
+  background: transparent;
+  border-color: var(--ink-2);
+  color: var(--mute);
 }
-.screen[data-screen='home'] .avatar {
-  background: var(--accent-soft);
-  border: 1px solid rgba(124, 77, 255, 0.55);
-  border-radius: 12px;
-  color: var(--accent-strong);
+.screen[data-screen='onboarding'] .panel__title {
   font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-.screen[data-screen='home'] .topbar__name {
-  font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.screen[data-screen='onboarding'] .field__input {
+  background: var(--ink-0);
+  border-color: var(--ink-2);
+  border-radius: 6px;
+}
+.screen[data-screen='onboarding'] .field__input:focus-visible {
+  outline-color: var(--acid);
+}
+
+/* --- Home ---------------------------------------------------------------------- */
+
+.screen[data-screen='home'].is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 8px 0 12px;
+}
+
+/* Top bar: mark + wordmark on the left; name pill and settings on the right. */
+.screen[data-screen='home'] .topbar {
+  padding: 0;
+}
+.screen[data-screen='home'] .topbar__identity {
+  flex: 0 1 auto;
+  gap: 10px;
+}
+.topbar__wordmark {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.topbar__brand {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.topbar__date {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  line-height: 12px;
+  color: var(--mute);
+  white-space: nowrap;
+}
+/* Phones too narrow for the one-line wordmark get the stacked lockup. */
+@media (max-width: 419px) {
+  .topbar__brand {
+    white-space: normal;
+  }
+}
+.topbar__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.namepill {
+  height: 40px;
+  min-width: 0;
+  max-width: 132px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ink-1);
+  border: 1px solid var(--ink-2);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+.namepill > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.namepill__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--acid);
 }
 .screen[data-screen='home'] .iconbtn {
-  width: 44px;
-  height: 44px;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
   background: transparent;
-  border-color: rgba(241, 238, 251, 0.16);
-  color: var(--text-muted);
-  transition: border-color 0.18s, color 0.18s, background 0.18s;
+  border-color: var(--ink-2);
+  color: var(--mute);
+  transition: border-color 0.18s, color 0.18s;
 }
 .screen[data-screen='home'] .iconbtn:hover {
-  border-color: var(--accent);
-  color: var(--text);
-  background: var(--accent-soft);
+  border-color: var(--acid);
+  color: var(--paper);
 }
 
+/* Stats strip. */
 .screen[data-screen='home'] .stats-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 24px;
+  margin: 0;
 }
 .screen[data-screen='home'] .stat {
-  background: rgba(19, 14, 34, 0.55);
-  border-radius: 10px;
-  padding: 12px 4px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--ink-1);
+  border-color: var(--ink-2);
+  border-radius: 6px;
+  padding: 12px 8px 10px;
 }
 .screen[data-screen='home'] .stat strong {
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 700;
+  font-size: 22px;
+  line-height: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .screen[data-screen='home'] .stat span {
-  display: block;
-  margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  line-height: 1.35;
-  white-space: normal;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--mute);
 }
 
 .screen[data-screen='home'] .stack > * + * {
   margin-top: 28px;
 }
-.screen[data-screen='home'] .card__label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-}
-.screen[data-screen='home'] .card__title {
-  font-family: var(--font-display);
-  font-size: 24px;
-  letter-spacing: 0.02em;
-  margin: 8px 0 4px;
-}
-.screen[data-screen='home'] .card__meta {
-  font-size: 14px;
-  color: var(--text-muted);
-}
 
-.screen[data-screen='home'] .section__title {
+/* Play card: step 1 pick a category, step 2 play it. */
+.playcard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--ink-1);
+  border: 1px solid var(--ink-2);
+  border-radius: 8px;
+  padding: 18px 16px 16px;
+}
+.playcard__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.playcard__label {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin: 0;
+  line-height: 1.4;
+}
+.playcard__resets {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  color: var(--text-faint);
-  margin-bottom: 14px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--mute);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.screen[data-screen='home'] .section__title::before {
-  content: '';
+
+/* The step markers: a 10px acid square built from 4×4 shards, which fly
+   apart on Play (app.js sets each shard's --x/--y/--r). */
+.marker {
   flex: none;
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  transform: rotate(45deg);
+  width: 10px;
+  height: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, 2.5px);
+  grid-auto-rows: 2.5px;
 }
+.marker__shard {
+  background: var(--acid);
+  border-radius: 0.5px;
+  transition: opacity 0.6s ease-out, transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.playcard.is-dissolving .marker__shard {
+  opacity: 0;
+  transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(0.3);
+}
+
+.screen[data-screen='home'] .chipgrid {
+  gap: 8px;
+  margin: 0;
+}
+.screen[data-screen='home'] .chip {
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ink-2);
+  background: transparent;
+  color: var(--mute);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: border-color 0.18s, background 0.18s, color 0.18s;
+}
+.screen[data-screen='home'] .chip:hover {
+  border-color: var(--mute);
+  color: var(--paper);
+}
+.screen[data-screen='home'] .chip.is-complete {
+  border-color: var(--ink-2);
+}
+.screen[data-screen='home'] .chip.is-complete::after {
+  content: none;
+}
+.screen[data-screen='home'] .chip.is-selected,
+.screen[data-screen='home'] .chip.is-selected:hover {
+  border-color: var(--acid);
+  background: rgba(200, 255, 61, 0.1);
+  color: var(--paper);
+}
+.chip__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 1.5px;
+  background: var(--paper);
+}
+[data-category='current-events'] .chip__dot { background: #ff5b38; }
+[data-category='science'] .chip__dot { background: #59c8ff; }
+[data-category='geography'] .chip__dot { background: #8cf0a8; }
+[data-category='general-knowledge'] .chip__dot { background: #c8ff3d; }
+[data-category='entertainment'] .chip__dot { background: #f4f1ea; }
+.chip__done {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--mint);
+}
+
+.screen[data-screen='home'] .playcard__play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0 16px;
+}
+
+/* Leaderboard. */
 .screen[data-screen='home'] .section__header {
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
-.screen[data-screen='home'] .section__header .section__title {
-  margin-bottom: 0;
-}
-.screen[data-screen='home'] .chipgrid {
-  gap: 10px;
-  margin-bottom: 14px;
+.screen[data-screen='home'] .section__title {
+  margin: 0;
 }
 .screen[data-screen='home'] .linkbtn {
-  min-height: 44px;
-  padding: 0 6px;
+  padding: 8px 0;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--accent-strong);
-  border-radius: 6px;
+  text-decoration: none;
+  color: var(--acid);
 }
 .screen[data-screen='home'] .linkbtn:hover {
-  color: var(--text);
+  color: var(--paper);
 }
 
+/* Fixed columns (# · player · all · five categories); on screens too narrow
+   for them, the wrapper scrolls sideways rather than squeezing the names. */
 .screen[data-screen='home'] .lbmatrix-scroll {
-  background: rgba(19, 14, 34, 0.5);
-  border-radius: 12px;
+  overflow-x: auto;
+  background: var(--ink-1);
+  border-color: var(--ink-2);
+  border-radius: 8px;
 }
+.screen[data-screen='home'] .lbmatrix {
+  min-width: 380px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.screen[data-screen='home'] .lbmatrix th,
+.screen[data-screen='home'] .lbmatrix td {
+  padding: 11px 2px;
+}
+.screen[data-screen='home'] .lbmatrix th {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.screen[data-screen='home'] .lbmatrix :is(th, td):first-child {
+  padding-left: 12px;
+}
+.screen[data-screen='home'] .lbmatrix :is(th, td):last-child {
+  padding-right: 12px;
+}
+.screen[data-screen='home'] .lbmatrix th:nth-child(1) { width: 42px; }
+.screen[data-screen='home'] .lbmatrix th:nth-child(2) { width: auto; }
+.screen[data-screen='home'] .lbmatrix th:nth-child(3) { width: 52px; }
+.screen[data-screen='home'] .lbmatrix th:nth-child(n + 4) { width: 40px; }
+.screen[data-screen='home'] .lbmatrix th:last-child { width: 50px; }
 .screen[data-screen='home'] .lbmatrix thead th {
   font-family: var(--font-mono);
+  font-size: 9px;
   font-weight: 500;
-  color: var(--text-faint);
+  letter-spacing: 0.12em;
+  color: var(--mute);
+  border-bottom: 1px solid var(--ink-2);
+  white-space: nowrap;
+}
+.screen[data-screen='home'] .lbmatrix tbody tr + tr {
+  border-top: 1px solid var(--ink-3);
+}
+.screen[data-screen='home'] .lbmatrix__rank {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--mute);
+}
+.screen[data-screen='home'] .lbmatrix__name {
+  font-weight: 600;
+  color: var(--paper);
+}
+.screen[data-screen='home'] .lbmatrix__score {
+  font-weight: 700;
+  color: var(--paper);
+}
+.screen[data-screen='home'] .lbmatrix__cat {
+  color: var(--mute);
 }
 .screen[data-screen='home'] .lbmatrix tr.is-you {
-  background: rgba(124, 77, 255, 0.14);
+  background: rgba(200, 255, 61, 0.07);
 }
 .screen[data-screen='home'] .lbmatrix tr.is-you td {
-  color: var(--text);
+  font-weight: inherit;
 }
 .screen[data-screen='home'] .lbmatrix tr.is-you td:first-child {
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--acid);
+}
+.screen[data-screen='home'] .lbmatrix tr.is-you :is(.lbmatrix__name, .lbmatrix__score) {
+  color: var(--paper);
+}
+.screen[data-screen='home'] .lbmatrix tr.is-you :is(.lbmatrix__rank, .lbmatrix__cat) {
+  color: var(--mute);
+}
+.screen[data-screen='home'] .lbmatrix tr.is-you .lbmatrix__name { font-weight: 600; }
+.screen[data-screen='home'] .lbmatrix tr.is-you .lbmatrix__score { font-weight: 700; }
+
+/* Invite. */
+.screen[data-screen='home'] [data-action='invite-friend'] {
+  min-height: 48px;
 }
 
 /* ==========================================================================

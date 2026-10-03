@@ -5,7 +5,7 @@ import { leaderboardService } from './services/LeaderboardService.js';
 import { ShareService } from './services/ShareService.js';
 import {
   $, $$, role, setText, show, el, clear,
-  formatNumber, formatSeconds, initials, toast, animateNumber, CATEGORY_LABELS,
+  formatNumber, formatSeconds, toast, animateNumber, CATEGORY_LABELS,
 } from './ui/dom.js';
 
 /**
@@ -17,7 +17,12 @@ import {
 
 const state = {
   screen: 'boot',
-  category: 'current-events',
+  /** The quick-play pick. Starts empty so the "pick a category" step is seen. */
+  category: null,
+  /** True while the play card's markers shatter on the way into a quiz. */
+  dissolving: false,
+  /** When today's game day ends (ISO string from the server), for the countdown. */
+  resetsAt: null,
   lastSummary: null,
   timer: null,
   questionDeadline: 0,
@@ -44,7 +49,7 @@ function showScreen(name) {
 // The backdrops' SVG (SMIL) motion isn't covered by the stylesheet's
 // reduced-motion rule, so hold it still here.
 if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  for (const svg of $$('.backdrop svg')) svg.pauseAnimations?.();
+  for (const svg of $$('.backdrop svg, .ambient svg, svg.pulse-mark')) svg.pauseAnimations?.();
 }
 
 /**
@@ -128,8 +133,10 @@ async function renderHome() {
   if (!player) return;
 
   setText('home-name', player.displayName);
-  const avatar = role('home-avatar');
-  if (avatar) avatar.textContent = initials(player.displayName);
+  setDissolving(false);
+  renderPlayCard();
+  renderDateLabel(null);
+  startResetCountdown();
 
   renderHomeStats(playerService.stats);
 
@@ -147,25 +154,157 @@ async function renderHome() {
 /** Quick-play categories — each has its own fixed daily quiz. */
 const QUICK_PLAY_CATEGORIES = Object.keys(CATEGORY_LABELS);
 
-/** Ticks off each category chip whose quiz the player has already completed today. */
+/**
+ * Ticks off each category chip whose quiz the player has already completed
+ * today, and picks up the game day, its question count and when it resets.
+ */
 async function renderCategoryCompletion() {
   const statuses = await Promise.all(
     QUICK_PLAY_CATEGORIES.map((category) => triviaService.dailyStatus(category)),
   );
   QUICK_PLAY_CATEGORIES.forEach((category, i) => {
     const chip = $(`[data-category="${category}"]`);
-    if (chip) chip.classList.toggle('is-complete', Boolean(statuses[i].played));
+    if (!chip) return;
+    const { played, yourResult } = statuses[i];
+    chip.classList.toggle('is-complete', Boolean(played));
+    const done = role('chip-done', chip);
+    if (done) {
+      done.textContent = played && yourResult ? `✓ ${formatNumber(yourResult.score)}` : '✓';
+      done.hidden = !played;
+    }
   });
+
+  const today = statuses[0];
+  if (!today) return;
+  renderDateLabel(today.day);
+  if (today.questionCount) setText('question-count', String(today.questionCount));
+  if (today.resetsAt) {
+    state.resetsAt = today.resetsAt;
+    renderResetCountdown();
+  }
+}
+
+// --- Play card ----------------------------------------------------------------
+
+/** Chip states and the play button's label both follow state.category. */
+function renderPlayCard() {
+  const chips = role('category-chips');
+  selectWithin(chips, state.category ? $(`[data-category="${state.category}"]`, chips) : null);
+  const label = state.category
+    ? `PLAY ${(CATEGORY_LABELS[state.category] ?? state.category).toUpperCase()}`
+    : 'PICK A CATEGORY TO PLAY';
+  setText('play-label', label);
+  $('[data-action="play-quick"]')?.setAttribute('aria-disabled', String(!state.category));
+}
+
+/** Deterministic noise, so the shatter looks the same every time. */
+function shardHash(a, b) {
+  const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+/**
+ * Each 10px marker square is a 4×4 grid of shards. Their scatter vectors are
+ * fixed up front as CSS variables; .is-dissolving on the card sends them out.
+ */
+function buildMarkers() {
+  for (const marker of $$('[data-role="marker"]')) {
+    const seed = Number(marker.dataset.seed) || 0;
+    const shards = Array.from({ length: 16 }, (_, i) => {
+      const cx = (i % 4) - 1.5;
+      const cy = Math.floor(i / 4) - 1.5;
+      const spread = 7 + shardHash(i, seed) * 9;
+      const x = cx * spread + (shardHash(i, seed + 2) - 0.5) * 8;
+      const y = cy * spread + (shardHash(i, seed + 3) - 0.5) * 8 - 4;
+      const r = (shardHash(i, seed + 4) - 0.5) * 240;
+      const shard = el('span', { class: 'marker__shard' });
+      shard.style.setProperty('--x', `${x.toFixed(2)}px`);
+      shard.style.setProperty('--y', `${y.toFixed(2)}px`);
+      shard.style.setProperty('--r', `${r.toFixed(1)}deg`);
+      return shard;
+    });
+    clear(marker).append(...shards);
+  }
+}
+
+function setDissolving(on) {
+  state.dissolving = on;
+  role('playcard')?.classList.toggle('is-dissolving', on);
+}
+
+const DISSOLVE_MS = 600;
+const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Play from home: shatter the step markers, then start the picked quiz. */
+async function playQuick() {
+  if (!state.category || state.dissolving) return;
+  setDissolving(true);
+  if (!prefersReducedMotion()) await new Promise((r) => setTimeout(r, DISSOLVE_MS));
+  // The player may have navigated away mid-shatter.
+  if (state.screen !== 'home') return;
+  await startCategoryQuiz();
+}
+
+// --- Day label and reset countdown --------------------------------------------
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+/** "03 OCT" for the game day (YYYY-MM-DD), or the local date until it's known. */
+function renderDateLabel(day) {
+  let label;
+  if (day) {
+    const [, month, date] = day.split('-');
+    label = `${date} ${MONTHS[Number(month) - 1]}`;
+  } else {
+    const now = new Date();
+    label = `${String(now.getDate()).padStart(2, '0')} ${MONTHS[now.getMonth()]}`;
+  }
+  setText('home-date', label);
+}
+
+let countdownTimer = null;
+/** The resetsAt already reloaded for, so a skewed clock can't loop the reload. */
+let reloadedFor = null;
+
+function startResetCountdown() {
+  clearInterval(countdownTimer);
+  renderResetCountdown();
+  countdownTimer = setInterval(() => {
+    if (state.screen !== 'home') {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      return;
+    }
+    renderResetCountdown();
+  }, 15000);
+}
+
+/** HH:MM until the game day rolls over; at zero, reload home for the new day. */
+function renderResetCountdown() {
+  if (!state.resetsAt) return;
+  const leftMs = new Date(state.resetsAt).getTime() - Date.now();
+  if (leftMs <= 0) {
+    setText('resets-in', '00:00');
+    if (state.screen === 'home' && reloadedFor !== state.resetsAt) {
+      reloadedFor = state.resetsAt;
+      renderHome();
+    }
+    return;
+  }
+  const minutes = Math.ceil(leftMs / 60000);
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  setText('resets-in', `${hh}:${mm}`);
 }
 
 function renderHomeStats(stats) {
   const container = role('home-stats');
   if (!container || !stats) return;
   clear(container).append(
-    statTile(formatNumber(stats.weeklyScore), 'This week'),
-    statTile(formatNumber(stats.allTimeScore), 'All time'),
+    statTile(formatNumber(stats.gamesPlayed), 'Played'),
+    statTile(formatNumber(stats.personalBests?.gameScore), 'Best'),
     statTile(`${stats.accuracy}%`, 'Accuracy'),
-    statTile(formatNumber(stats.bestStreak), 'Best streak'),
+    statTile(formatNumber(stats.bestStreak), 'Streak'),
   );
 }
 
@@ -464,6 +603,7 @@ async function startCategoryQuiz() {
     onError: (err) => {
       toast(err.message);
       showScreen('home');
+      setDissolving(false);
     },
   });
   if (!started) return;
@@ -519,13 +659,14 @@ function renderLeaderboardTable(bodyRole, data) {
 
 function leaderboardRow(entry) {
   return el('tr', { class: entry.isViewer ? 'is-you' : undefined }, [
-    el('td', { class: 'lbmatrix__rank', text: `#${entry.rank}` }),
+    el('td', { class: 'lbmatrix__rank', text: String(entry.rank).padStart(2, '0') }),
     el('td', { class: 'lbmatrix__name', text: entry.displayName }),
     el('td', { class: 'lbmatrix__score', text: formatNumber(entry.totalScore) }),
     ...QUICK_PLAY_CATEGORIES.map((category) =>
       el('td', {
         class: 'lbmatrix__cat',
-        text: formatNumber(entry.categoryScores[category] ?? 0),
+        // No score in a category yet reads as a dash, not a zero.
+        text: entry.categoryScores[category] ? formatNumber(entry.categoryScores[category]) : '—',
       }),
     ),
   ]);
@@ -630,8 +771,9 @@ function bindEvents() {
     if (!target) return;
 
     if (target.dataset.category) {
+      if (state.dissolving) return;
       state.category = target.dataset.category;
-      selectWithin(role('category-chips'), target);
+      renderPlayCard();
       return;
     }
     if (target.dataset.historyDay) {
@@ -651,7 +793,7 @@ function bindEvents() {
         target.hidden = true;
         break;
       case 'play-quick':
-        await startCategoryQuiz();
+        await playQuick();
         break;
       case 'next-question':
         advance();
@@ -798,5 +940,6 @@ function selectWithin(container, selected) {
   for (const child of container.children) child.classList.toggle('is-selected', child === selected);
 }
 
+buildMarkers();
 bindEvents();
 boot();

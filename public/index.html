@@ -3,78 +3,44 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#12101c" />
+    <meta name="theme-color" content="#0B0B0D" />
     <meta name="color-scheme" content="dark light" />
     <title>Entropic Brainwaves</title>
     <meta
       name="description"
       content="Entropic Brainwaves: trivia built from today's news, science, geography, general knowledge and entertainment. One quiz per category per day — play, see where you rank, and invite others to play."
     />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E"
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
     />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" type="image/svg+xml" href="/img/logo-pulse.svg" />
   </head>
   <body>
-    <!-- Entropic Labs opening ident: plays first, the app loads underneath. -->
-    <script src="/js/ident.js" data-src="/media/entropic-ident.mp4"></script>
-    <!-- Decorative sky for the cover and home screens (see styles.css). -->
+    <!-- Entropic Brainwaves opening ident: plays first, the app loads underneath. -->
+    <script src="/js/ident.js"></script>
+    <!-- Entropy backdrop for the cover, onboarding and home screens: one
+         oversized Pulse mark whose broken rings drift, faded out downwards
+         (see styles.css). -->
     <div class="ambient" aria-hidden="true">
-      <svg width="100%" height="100%" focusable="false">
-        <circle class="star tw1" cx="2%" cy="8%" r="1.1" opacity="0.7" />
-        <circle class="star tw2" cx="5%" cy="22%" r="0.9" opacity="0.5" />
-        <circle class="star tw3" cx="3%" cy="38%" r="1.3" opacity="0.8" />
-        <circle class="star tw1 star--teal" cx="7%" cy="52%" r="1.6" opacity="0.85" />
-        <circle class="star tw2" cx="2%" cy="66%" r="0.9" opacity="0.5" />
-        <circle class="star tw3" cx="6%" cy="80%" r="1.2" opacity="0.7" />
-        <circle class="star tw1" cx="3%" cy="93%" r="1" opacity="0.6" />
-        <circle class="star tw2" cx="9%" cy="14%" r="0.8" opacity="0.4" />
-        <circle class="star tw3 star--amber" cx="11%" cy="44%" r="1.4" opacity="0.8" />
-        <circle class="star tw1" cx="8%" cy="72%" r="0.8" opacity="0.4" />
-        <circle class="star tw2" cx="12%" cy="90%" r="1" opacity="0.55" />
-        <circle class="star tw2" cx="98%" cy="6%" r="1.2" opacity="0.7" />
-        <circle class="star tw3" cx="95%" cy="19%" r="0.9" opacity="0.5" />
-        <circle class="star tw1" cx="97%" cy="34%" r="1.3" opacity="0.8" />
-        <circle class="star tw2" cx="93%" cy="47%" r="0.8" opacity="0.4" />
-        <circle class="star tw3" cx="99%" cy="60%" r="1" opacity="0.6" />
-        <circle class="star tw1 star--magenta" cx="94%" cy="76%" r="1.6" opacity="0.85" />
-        <circle class="star tw2" cx="97%" cy="90%" r="0.9" opacity="0.5" />
-        <circle class="star tw3" cx="90%" cy="11%" r="0.8" opacity="0.4" />
-        <circle class="star tw1" cx="88%" cy="38%" r="1" opacity="0.5" />
-        <circle class="star tw2" cx="91%" cy="84%" r="1.2" opacity="0.7" />
-        <circle class="star tw3" cx="87%" cy="96%" r="0.8" opacity="0.4" />
-        <circle class="star tw1" cx="24%" cy="3%" r="0.9" opacity="0.5" />
-        <circle class="star tw2" cx="38%" cy="6%" r="0.8" opacity="0.4" />
-        <circle class="star tw3" cx="52%" cy="2%" r="1.1" opacity="0.6" />
-        <circle class="star tw1" cx="66%" cy="5%" r="0.8" opacity="0.4" />
-        <circle class="star tw2" cx="78%" cy="3%" r="1" opacity="0.55" />
-        <circle class="star tw3" cx="20%" cy="97%" r="0.9" opacity="0.5" />
-        <circle class="star tw1" cx="34%" cy="94%" r="0.8" opacity="0.4" />
-        <circle class="star tw2" cx="50%" cy="98%" r="1.1" opacity="0.6" />
-        <circle class="star tw3" cx="64%" cy="95%" r="0.8" opacity="0.4" />
-        <circle class="star tw1" cx="80%" cy="97%" r="1" opacity="0.55" />
-        <svg x="100%" y="0" overflow="visible">
-          <g class="orbit-scale">
-            <g class="orbit">
-              <circle class="orbit__path" r="280" />
-              <circle class="orbit__path orbit__path--outer" r="430" />
-              <circle class="star star--teal" cx="-242" cy="140" r="3" />
-              <circle class="star star--magenta" cx="-215" cy="372" r="2.4" />
-            </g>
-          </g>
-        </svg>
-        <svg x="0" y="100%" overflow="visible">
-          <g class="orbit-scale">
-            <g class="orbit orbit--reverse">
-              <circle class="orbit__path" r="240" />
-              <circle class="orbit__path orbit__path--outer" r="390" />
-              <circle class="star star--amber" cx="208" cy="-120" r="3" />
-              <circle class="star star--teal" cx="133" cy="-366" r="2" />
-            </g>
-          </g>
-        </svg>
+      <svg class="ambient__mark" viewBox="0 0 160 160" focusable="false">
+        <defs>
+          <linearGradient id="iri-ambient" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="160" y2="160">
+            <stop offset="0" stop-color="#C8FF3D" /><stop offset="0.5" stop-color="#8CF0A8" /><stop offset="1" stop-color="#59C8FF" />
+          </linearGradient>
+        </defs>
+        <rect x="56" y="56" width="48" height="48" rx="6" fill="none" stroke="url(#iri-ambient)" stroke-width="3" />
+        <rect x="36" y="36" width="88" height="88" rx="8" fill="none" stroke="url(#iri-ambient)" stroke-width="3" stroke-dasharray="44 10 30 8 20 14 36 12">
+          <animate attributeName="stroke-dashoffset" from="0" to="174" dur="26s" repeatCount="indefinite" />
+        </rect>
+        <rect x="16" y="16" width="128" height="128" rx="10" fill="none" stroke="url(#iri-ambient)" stroke-width="3" stroke-dasharray="22 18 12 24 8 30 14 22 6 34">
+          <animate attributeName="stroke-dashoffset" from="0" to="-190" dur="40s" repeatCount="indefinite" />
+        </rect>
       </svg>
+      <div class="ambient__fade"></div>
     </div>
 
     <!-- Per-category scenery behind a game (see "Category backdrops" in
@@ -247,13 +213,34 @@
       <!-- Cover / entry page ------------------------------------------------>
       <section class="screen" data-screen="cover">
         <div class="panel panel--centered">
+          <svg class="pulse-mark pulse-mark--hero" viewBox="0 0 160 160" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id="iri-cover" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="160" y2="160">
+                <stop offset="0" stop-color="#C8FF3D" /><stop offset="0.5" stop-color="#8CF0A8" /><stop offset="1" stop-color="#59C8FF" />
+              </linearGradient>
+            </defs>
+            <rect x="72" y="72" width="16" height="16" rx="3" fill="url(#iri-cover)" />
+            <rect x="56" y="56" width="48" height="48" rx="6" fill="none" stroke="url(#iri-cover)" stroke-width="8" />
+            <rect x="36" y="36" width="88" height="88" rx="8" fill="none" stroke="url(#iri-cover)" stroke-width="8" stroke-dasharray="44 10 30 8 20 14 36 12">
+              <animate attributeName="stroke-dashoffset" from="0" to="174" dur="14s" repeatCount="indefinite" />
+            </rect>
+            <rect x="16" y="16" width="128" height="128" rx="10" fill="none" stroke="url(#iri-cover)" stroke-width="8" stroke-dasharray="22 18 12 24 8 30 14 22 6 34">
+              <animate attributeName="stroke-dashoffset" from="0" to="-190" dur="22s" repeatCount="indefinite" />
+            </rect>
+            <g fill="url(#iri-cover)">
+              <rect x="3" y="40" width="6" height="6" rx="2" /><rect x="150" y="22" width="5" height="5" rx="1.5" /><rect x="149" y="120" width="6" height="6" rx="2" />
+              <rect x="8" y="118" width="4" height="4" rx="1" /><rect x="70" y="3" width="5" height="5" rx="1.5" /><rect x="96" y="151" width="4" height="4" rx="1" />
+            </g>
+            <rect x="153" y="64" width="5" height="5" rx="1.5" fill="#FF5B38" />
+          </svg>
           <h1 class="panel__title panel__title--hero">Entropic Brainwaves</h1>
+          <p class="panel__kicker">The Entropic Labs · Games</p>
           <p class="panel__subtitle">Trivia built fresh from the live internet, every day.</p>
           <ul class="coverlist">
-            <li><span class="coverlist__icon" aria-hidden="true">🔄</span> Every category resets once a day — same questions for everyone</li>
-            <li><span class="coverlist__icon" aria-hidden="true">🥇</span> Your first completed attempt is the one that scores</li>
-            <li><span class="coverlist__icon" aria-hidden="true">🏆</span> See your rank on a permanent leaderboard, by category</li>
-            <li><span class="coverlist__icon" aria-hidden="true">📤</span> Invite friends and family with a shareable link</li>
+            <li><span class="coverlist__icon" aria-hidden="true"></span> Every category resets once a day — same questions for everyone</li>
+            <li><span class="coverlist__icon" aria-hidden="true"></span> Your first completed attempt is the one that scores</li>
+            <li><span class="coverlist__icon" aria-hidden="true"></span> See your rank on a permanent leaderboard, by category</li>
+            <li><span class="coverlist__icon" aria-hidden="true"></span> Invite friends and family with a shareable link</li>
           </ul>
           <div class="chipgrid chipgrid--tight coverlist__categories" aria-label="Categories">
             <span class="chip chip--small">Current Events</span>
@@ -305,28 +292,63 @@
       <section class="screen" data-screen="home">
         <header class="topbar">
           <div class="topbar__identity">
-            <span class="avatar" data-role="home-avatar" aria-hidden="true"></span>
-            <div>
-              <p class="topbar__name" data-role="home-name"></p>
+            <svg class="pulse-mark pulse-mark--header" viewBox="0 0 160 160" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="iri-header" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="160" y2="160">
+                  <stop offset="0" stop-color="#C8FF3D" /><stop offset="0.5" stop-color="#8CF0A8" /><stop offset="1" stop-color="#59C8FF" />
+                </linearGradient>
+              </defs>
+              <rect x="72" y="72" width="16" height="16" rx="3" fill="url(#iri-header)" />
+              <rect x="56" y="56" width="48" height="48" rx="6" fill="none" stroke="url(#iri-header)" stroke-width="8" />
+              <rect x="36" y="36" width="88" height="88" rx="8" fill="none" stroke="url(#iri-header)" stroke-width="8" stroke-dasharray="44 10 30 8 20 14 36 12">
+                <animate attributeName="stroke-dashoffset" from="0" to="174" dur="14s" repeatCount="indefinite" />
+              </rect>
+              <rect x="16" y="16" width="128" height="128" rx="10" fill="none" stroke="url(#iri-header)" stroke-width="8" stroke-dasharray="22 18 12 24 8 30 14 22 6 34">
+                <animate attributeName="stroke-dashoffset" from="0" to="-190" dur="22s" repeatCount="indefinite" />
+              </rect>
+              <rect x="153" y="64" width="5" height="5" rx="1.5" fill="#FF5B38" />
+            </svg>
+            <div class="topbar__wordmark">
+              <span class="topbar__brand">ENTROPIC BRAINWAVES</span>
+              <span class="topbar__date"><span data-role="home-date"></span> · DAILY SET</span>
             </div>
           </div>
-          <button class="iconbtn" data-action="open-settings" aria-label="Settings">⚙</button>
+          <div class="topbar__actions">
+            <span class="namepill"><span class="namepill__dot" aria-hidden="true"></span><span data-role="home-name"></span></span>
+            <button class="iconbtn" data-action="open-settings" aria-label="Settings">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <div class="stats-strip" data-role="home-stats"></div>
 
         <div class="stack">
-          <div class="section">
-            <h2 class="section__title">Quick play</h2>
-            <div class="chipgrid" data-role="category-chips">
-              <button class="chip is-selected" data-category="current-events">Current Events</button>
-              <button class="chip" data-category="science">Science</button>
-              <button class="chip" data-category="geography">Geography</button>
-              <button class="chip" data-category="general-knowledge">General Knowledge</button>
-              <button class="chip" data-category="entertainment">Entertainment</button>
+          <!-- Two steps: pick a category, then play. The button names the pick. -->
+          <section class="playcard" data-role="playcard">
+            <div class="playcard__row">
+              <h2 class="playcard__label">
+                <span class="marker" data-role="marker" data-seed="0" aria-hidden="true"></span><span>Pick a category</span>
+              </h2>
+              <span class="playcard__resets">RESETS IN <span data-role="resets-in">--:--</span></span>
             </div>
-            <button class="btn btn--primary btn--block" data-action="play-quick">PLAY</button>
-          </div>
+            <div class="chipgrid" data-role="category-chips">
+              <button class="chip" data-category="current-events"><span class="chip__dot" aria-hidden="true"></span>Current Events<span class="chip__done" data-role="chip-done" hidden></span></button>
+              <button class="chip" data-category="science"><span class="chip__dot" aria-hidden="true"></span>Science<span class="chip__done" data-role="chip-done" hidden></span></button>
+              <button class="chip" data-category="geography"><span class="chip__dot" aria-hidden="true"></span>Geography<span class="chip__done" data-role="chip-done" hidden></span></button>
+              <button class="chip" data-category="general-knowledge"><span class="chip__dot" aria-hidden="true"></span>General Knowledge<span class="chip__done" data-role="chip-done" hidden></span></button>
+              <button class="chip" data-category="entertainment"><span class="chip__dot" aria-hidden="true"></span>Entertainment<span class="chip__done" data-role="chip-done" hidden></span></button>
+            </div>
+            <p class="playcard__label">
+              <span class="marker" data-role="marker" data-seed="1" aria-hidden="true"></span><span>Play · <span data-role="question-count">5</span> questions · same set for everyone</span>
+            </p>
+            <button class="btn btn--primary btn--block playcard__play" data-action="play-quick" aria-disabled="true">
+              <span data-role="play-label">PICK A CATEGORY TO PLAY</span><span aria-hidden="true">→</span>
+            </button>
+          </section>
 
           <div class="section">
             <div class="section__header">
@@ -339,12 +361,12 @@
                   <tr>
                     <th>#</th>
                     <th>Player</th>
-                    <th>Overall</th>
-                    <th title="Current Events"><span class="lb-long">Current Events</span><span class="lb-short" aria-hidden="true">News</span></th>
-                    <th title="Science"><span class="lb-long">Science</span><span class="lb-short" aria-hidden="true">Sci</span></th>
-                    <th title="Geography"><span class="lb-long">Geography</span><span class="lb-short" aria-hidden="true">Geo</span></th>
-                    <th title="General Knowledge"><span class="lb-long">General Knowledge</span><span class="lb-short" aria-hidden="true">Gen</span></th>
-                    <th title="Entertainment"><span class="lb-long">Entertainment</span><span class="lb-short" aria-hidden="true">Ent</span></th>
+                    <th title="Overall">All</th>
+                    <th title="Current Events">News</th>
+                    <th title="Science">Sci</th>
+                    <th title="Geography">Geo</th>
+                    <th title="General Knowledge">Gen</th>
+                    <th title="Entertainment">Ent</th>
                   </tr>
                 </thead>
                 <tbody data-role="home-leaderboard-body"></tbody>
@@ -353,7 +375,7 @@
           </div>
 
           <button class="btn btn--secondary btn--block" data-action="invite-friend">
-            📤 INVITE A FRIEND
+            INVITE A FRIEND
           </button>
         </div>
       </section>
