@@ -12,6 +12,13 @@ everyone who plays it. Nobody has to ship a new build for new trivia to appear.
 
 ---
 
+## Opening ident
+
+Every launch opens on the Entropic Labs logo (`public/media/entropic-ident.mp4`), played full-screen
+by `public/js/ident.js` while the game loads underneath. A tap, click, Enter, Space or Escape
+skips it; if the video can't load or autoplay, the game simply starts. Add
+`?noident` to the URL to skip it while developing.
+
 ## How it works
 
 ```
@@ -357,6 +364,7 @@ public/
                ShareService, ApiClient
   js/ui/       DOM helpers
   js/app.js    screen routing and the game loop
+  js/ident.js  the Entropic Labs opening ident (video in media/)
 scripts/       dev-server, migrate, refresh
 tests/         unit tests + a full end-to-end suite
 ```

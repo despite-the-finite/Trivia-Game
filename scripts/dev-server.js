@@ -42,6 +42,7 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.mp4': 'video/mp4',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
 };
@@ -78,10 +79,29 @@ async function serveStatic(req, res, urlPath) {
   try {
     const info = await stat(target);
     if (!info.isFile()) throw new Error('not a file');
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': MIME[extname(target)] ?? 'application/octet-stream',
       'Cache-Control': 'no-cache',
-    });
+      'Accept-Ranges': 'bytes',
+    };
+    // Safari won't play <video> from a server that ignores Range requests.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+    if (range && (range[1] || range[2])) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, info.size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), info.size - 1) : info.size - 1;
+      if (start > end || start >= info.size) {
+        res.writeHead(416, { 'Content-Range': `bytes */${info.size}` }).end();
+        return;
+      }
+      res.writeHead(206, {
+        ...headers,
+        'Content-Range': `bytes ${start}-${end}/${info.size}`,
+        'Content-Length': end - start + 1,
+      });
+      createReadStream(target, { start, end }).pipe(res);
+      return;
+    }
+    res.writeHead(200, { ...headers, 'Content-Length': info.size });
     createReadStream(target).pipe(res);
   } catch {
     if (isAsset) {
