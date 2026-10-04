@@ -14,14 +14,16 @@ everyone who plays it. Nobody has to ship a new build for new trivia to appear.
 
 ## Opening ident
 
-Every launch opens on a 2-second Entropic Brainwaves ident — the Pulse mark
-resolving out of noise, with a synthesized sound — played full-screen by
-`public/js/ident.js` while the game loads underneath. It is self-contained (SVG +
-Web Audio, no media files). A tap, click, Enter, Space or Escape skips it. The
-ident has sound, and browsers won't start sound before the player interacts, so
-when the browser blocks it the screen first says "Tap to begin" (that tap also
-unlocks the game's own audio). Add `?noident` to the URL to skip it while
-developing.
+Every launch opens on two idents, played full-screen by `public/js/ident.js`
+while the game loads underneath: first the Entropic Labs studio logo
+(`public/media/entropic-ident.mp4`, the "E" dissolving into the red square),
+then a 3-second Entropic Brainwaves logo sting drawn in SVG with sound
+synthesized in Web Audio. A tap, click, Enter, Space or Escape skips the intro;
+if the video can't load or stalls, it moves straight on to the game logo. Both
+have sound, and browsers won't start sound before the player interacts, so when
+the browser blocks it the screen first says "Tap to begin" (that one tap
+unlocks both, and the game's own audio). Add `?noident` to the URL to skip it
+while developing.
 
 ## How it works
 
@@ -368,7 +370,7 @@ public/
                ShareService, ApiClient
   js/ui/       DOM helpers
   js/app.js    screen routing and the game loop
-  js/ident.js  the 2-second opening ident (SVG + Web Audio)
+  js/ident.js  the opening idents: studio video (media/), then the game logo
   img/logo-pulse.svg  the Pulse logo mark (also the favicon)
 scripts/       dev-server, migrate, refresh
 tests/         unit tests + a full end-to-end suite

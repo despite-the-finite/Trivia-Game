@@ -1157,9 +1157,12 @@ body:is([data-view='cover'], [data-view='onboarding'], [data-view='home']) .ambi
   flex: none;
   overflow: visible;
 }
-.pulse-mark--header {
-  width: 32px;
-  height: 32px;
+/* Static (no drift) in the home screen's top-right corner. */
+.pulse-mark--corner {
+  width: 40px;
+  height: 40px;
+  margin-left: 4px;
+  filter: drop-shadow(0 0 10px rgba(200, 255, 61, 0.25));
 }
 .pulse-mark--hero {
   width: 72px;
