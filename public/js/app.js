@@ -162,8 +162,10 @@ async function renderCategoryCompletion() {
   const statuses = await Promise.all(
     QUICK_PLAY_CATEGORIES.map((category) => triviaService.dailyStatus(category)),
   );
+  const chips = role('category-chips');
   QUICK_PLAY_CATEGORIES.forEach((category, i) => {
-    const chip = $(`[data-category="${category}"]`);
+    // Scoped to the chip grid: <body> also carries data-category after a game.
+    const chip = chips && $(`[data-category="${category}"]`, chips);
     if (!chip) return;
     const { played, yourResult } = statuses[i];
     chip.classList.toggle('is-complete', Boolean(played));
@@ -767,7 +769,7 @@ async function shareScore() {
 
 function bindEvents() {
   document.addEventListener('click', async (event) => {
-    const target = event.target.closest('[data-action], [data-category], [data-history-day]');
+    const target = event.target.closest('[data-action], .chip[data-category], [data-history-day]');
     if (!target) return;
 
     if (target.dataset.category) {
