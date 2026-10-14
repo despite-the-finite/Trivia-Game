@@ -110,7 +110,7 @@ export const LIMITS = {
 
 export const LLM = {
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: process.env.ANTHROPIC_MODEL || 'claude-opus-5',
+  model: process.env.ANTHROPIC_MODEL || 'claude-opus-5-5',
   effort: process.env.ANTHROPIC_EFFORT || 'medium',
   maxTokens: int(process.env.ANTHROPIC_MAX_TOKENS, 16000),
   enabled: Boolean(process.env.ANTHROPIC_API_KEY),
